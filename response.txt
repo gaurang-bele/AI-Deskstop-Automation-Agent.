@@ -1,0 +1,12 @@
+import pyautogui
+import time
+
+def open_notepad():
+
+    pyautogui.press("win")
+    time.sleep(1)
+
+    pyautogui.write("notepad")
+    pyautogui.press("enter")
+
+    return "Notepad opened"
