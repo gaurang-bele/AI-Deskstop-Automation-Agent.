@@ -1,0 +1,20 @@
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and find sum of column transaction_id
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and counta of column transaction_id
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and count of column A
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and sum of range A2:A100
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and max of column A
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and average of range B2:B200
+
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and filter column transaction_id starts with 12
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and filter column A greater than 1000
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and clear filter
+
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and sort by column transaction_id descending
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and set cell B2 to 123
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and clear contents of range B2:B10
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and delete rows 2 to 10
+
+open C:\Users\DELL\Downloads\Orders_Table (2).csv and save the workbook as C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx
+
+
+ open google and mail gaurangbele178@gmail.com subject "missing documents for application" body " you have missing documents like aadhar card, pan card etc" send it polish it

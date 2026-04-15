@@ -1,0 +1,12 @@
+Core pitch (what you actually say)
+“I switched Excel to a hybrid mode instead of just using generic mouse/keyboard automation because it’s much more reliable for real workloads. The agent is still able to move, click, scroll and edit text anywhere on screen, but for Excel I also expose a small, structured DSL that talks directly to Excel via COM.
+
+That means instead of ‘move here, double‑click, drag down’, I can say ‘sum of column transaction_id’ or ‘delete rows 2 to 10’. Those map to deterministic Excel actions, so they don’t break when the window size, zoom level, or UI layout changes. It’s faster on large files, easier to validate and log, and much safer because the agent can’t accidentally click in the wrong place and corrupt data. In short: UI actions for general flexibility, structured Excel actions for correctness, scale, and maintainability.”
+
+If they dig deeper, you can add:
+
+Robustness: UI scripts are fragile (resolution, focus, pop‑ups); COM calls work as long as the workbook and sheet exist.
+Clarity & debuggability: Logs say “aggregate column X” instead of a replay of low‑level clicks, which makes issues easy to reason about.
+Performance: Structured aggregation scans the actual data range, not the screen, so operations on 100k+ rows stay practical.
+Safety: The DSL only exposes a small, vetted set of operations (open, aggregate, filter, sort, delete rows, save), reducing the chance of destructive mistakes.
+Future‑proofing: If we change how the UI flow works, the COM layer stays the same; only the internals of excel_automation.py need updates, not all the LLM prompts or plans.

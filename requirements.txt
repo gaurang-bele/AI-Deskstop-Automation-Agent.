@@ -1,0 +1,23 @@
+# requirements.txt — All Python Libraries Needed
+# ─────────────────────────────────────────────────
+# Run this command to install everything at once:
+#   pip install -r requirements.txt
+#
+# WHY EACH LIBRARY:
+#   pyautogui      → controls mouse, keyboard, takes screenshots
+#   watchdog       → watches files for changes (detects when you save commands.txt)
+#   google-generativeai → official Gemini API SDK from Google
+#   Pillow         → image processing, needed by pyautogui for screenshots
+#   python-dotenv  → loads API key from .env file safely
+#   pytesseract    → OCR: reads text on screen so we can click by text, not coordinates
+#   pygetwindow    → finds and controls windows by title
+#   pywin32        → Windows API for reliable window focusing
+
+pyautogui
+watchdog
+google-generativeai
+Pillow
+python-dotenv
+pytesseract
+pygetwindow
+pywin32
