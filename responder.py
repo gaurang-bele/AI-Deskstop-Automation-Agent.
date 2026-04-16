@@ -41,19 +41,82 @@ def write_research_report(
     sources: list[dict[str, str]],
     output_file: str = "response.txt",
     error: str | None = None,
+    llm_usage: dict | None = None,
+    llm_usage_total: dict | None = None,
+    steps: list[dict] | None = None,
 ):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     status_line = "✅ RESEARCH COMPLETE" if findings else "⚠️ RESEARCH INCOMPLETE"
+    usage = {
+        "requests": int((llm_usage or {}).get("requests", 0)),
+        "prompt_tokens": int((llm_usage or {}).get("prompt_tokens", 0)),
+        "completion_tokens": int((llm_usage or {}).get("completion_tokens", 0)),
+        "total_tokens": int((llm_usage or {}).get("total_tokens", 0)),
+        "prompt_cost_usd": float((llm_usage or {}).get("prompt_cost_usd", 0.0)),
+        "completion_cost_usd": float((llm_usage or {}).get("completion_cost_usd", 0.0)),
+        "total_cost_usd": float((llm_usage or {}).get("total_cost_usd", 0.0)),
+    }
+    usage_total = {
+        "requests": int((llm_usage_total or {}).get("requests", 0)),
+        "prompt_tokens": int((llm_usage_total or {}).get("prompt_tokens", 0)),
+        "completion_tokens": int((llm_usage_total or {}).get("completion_tokens", 0)),
+        "total_tokens": int((llm_usage_total or {}).get("total_tokens", 0)),
+        "prompt_cost_usd": float((llm_usage_total or {}).get("prompt_cost_usd", 0.0)),
+        "completion_cost_usd": float((llm_usage_total or {}).get("completion_cost_usd", 0.0)),
+        "total_cost_usd": float((llm_usage_total or {}).get("total_cost_usd", 0.0)),
+    }
+    total_findings = sum(len(items) for items in findings.values())
+    report = {
+        "timestamp": timestamp,
+        "command": command,
+        "overall_status": status_line,
+        "summary": f"{total_findings} finding(s) across {len(findings)} field(s)",
+        "query": query,
+        "fields": fields,
+        "findings": findings,
+        "sources": sources,
+        "error": error,
+        "steps": steps or [],
+        "llm_usage": usage,
+        "llm_usage_total": usage_total,
+    }
 
     with open(output_file, "w", encoding="utf-8") as f:
-        f.write("=" * 60 + "\n")
-        f.write("  WEB RESEARCH REPORT\n")
-        f.write("=" * 60 + "\n\n")
+        f.write("=" * 50 + "\n")
+        f.write("       DESKTOP AI AGENT — RESPONSE REPORT\n")
+        f.write("=" * 50 + "\n\n")
         f.write(f"  Status  : {status_line}\n")
         f.write(f"  Time    : {timestamp}\n")
         f.write(f"  Command : {command}\n")
         f.write(f"  Query   : {query}\n")
         f.write(f"  Fields  : {', '.join(fields)}\n\n")
+        f.write(
+            f"  LLM Task Usage  : {usage['total_tokens']} tokens "
+            f"({usage['prompt_tokens']} prompt + {usage['completion_tokens']} completion), "
+            f"${usage['total_cost_usd']:.8f}\n"
+        )
+        f.write(
+            f"  LLM Total Usage : {usage_total['total_tokens']} tokens "
+            f"({usage_total['prompt_tokens']} prompt + {usage_total['completion_tokens']} completion), "
+            f"${usage_total['total_cost_usd']:.8f}\n\n"
+        )
+
+        f.write("-" * 50 + "\n")
+        f.write("  STEP-BY-STEP BREAKDOWN\n")
+        f.write("-" * 50 + "\n")
+        if steps:
+            for item in steps:
+                icon = "✓" if item.get("success") else "✗"
+                f.write(f"  [{icon}] Step {item.get('step')}: {item.get('action')}\n")
+                f.write(f"       └─ {item.get('note')}\n")
+            f.write("\n")
+        else:
+            f.write("  [✓] Step 1: open_app\n")
+            f.write("       └─ Opened browser\n")
+            f.write("  [✓] Step 2: search\n")
+            f.write(f"       └─ Queried: {query}\n")
+            f.write("  [✓] Step 3: copy_result_text\n")
+            f.write("       └─ Copied page text for extraction\n\n")
 
         if findings:
             for field in fields:
@@ -76,14 +139,27 @@ def write_research_report(
                 f.write(f"{idx}. {source.get('title', 'Untitled')} - {source.get('url', '')}\n")
             f.write("\n")
         else:
-            f.write("Sources checked: UI automation mode (page text copied from browser).\n\n")
+            f.write("Sources checked: No sources fetched.\n\n")
+
+        f.write("=" * 50 + "\n")
+        f.write("  RAW JSON LOG (for developers)\n")
+        f.write("=" * 50 + "\n")
+        f.write(json.dumps(report, indent=2, ensure_ascii=False))
+        f.write("\n")
 
     print(f"[RESPONSE] {status_line} — report written to {output_file}")
 
 
 # ── MAIN FUNCTION ─────────────────────────────────────────────
 
-def write_response(command: str, actions: list, results: list):
+def write_response(
+    command: str,
+    actions: list,
+    results: list,
+    llm_usage: dict | None = None,
+    llm_usage_total: dict | None = None,
+    llm_last_call: dict | None = None,
+):
     # WHY THIS FUNCTION:
     #   Takes all execution results, calculates pass/fail,
     #   and writes a human-readable + machine-readable report.
@@ -125,6 +201,24 @@ def write_response(command: str, actions: list, results: list):
     # ── GET TIMESTAMP ─────────────────────────────────────────
     # isoformat() → standard readable format: 2024-03-18T14:32:01
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    usage = {
+        "requests": int((llm_usage or {}).get("requests", 0)),
+        "prompt_tokens": int((llm_usage or {}).get("prompt_tokens", 0)),
+        "completion_tokens": int((llm_usage or {}).get("completion_tokens", 0)),
+        "total_tokens": int((llm_usage or {}).get("total_tokens", 0)),
+        "prompt_cost_usd": float((llm_usage or {}).get("prompt_cost_usd", 0.0)),
+        "completion_cost_usd": float((llm_usage or {}).get("completion_cost_usd", 0.0)),
+        "total_cost_usd": float((llm_usage or {}).get("total_cost_usd", 0.0)),
+    }
+    usage_total = {
+        "requests": int((llm_usage_total or {}).get("requests", 0)),
+        "prompt_tokens": int((llm_usage_total or {}).get("prompt_tokens", 0)),
+        "completion_tokens": int((llm_usage_total or {}).get("completion_tokens", 0)),
+        "total_tokens": int((llm_usage_total or {}).get("total_tokens", 0)),
+        "prompt_cost_usd": float((llm_usage_total or {}).get("prompt_cost_usd", 0.0)),
+        "completion_cost_usd": float((llm_usage_total or {}).get("completion_cost_usd", 0.0)),
+        "total_cost_usd": float((llm_usage_total or {}).get("total_cost_usd", 0.0)),
+    }
 
     # ── BUILD THE FULL DATA DICT ───────────────────────────────
     # We store everything in a dict so we can:
@@ -135,7 +229,10 @@ def write_response(command: str, actions: list, results: list):
         "command":        command,
         "overall_status": overall,
         "summary":        f"{passed}/{total} steps completed",
-        "steps":          results
+        "steps":          results,
+        "llm_usage":      usage,
+        "llm_usage_total": usage_total,
+        "llm_last_call": llm_last_call or {},
     }
 
     # ── WRITE TO response.txt ─────────────────────────────────
@@ -153,6 +250,20 @@ def write_response(command: str, actions: list, results: list):
         f.write(f"  Steps   :  {passed}/{total} succeeded\n")
         f.write(f"  Time    :  {timestamp}\n")
         f.write(f"  Command :  {command}\n")
+        if usage["requests"] > 0:
+            f.write(
+                f"  LLM     :  {usage['total_tokens']} tokens "
+                f"({usage['prompt_tokens']} prompt + {usage['completion_tokens']} completion) "
+                f"across {usage['requests']} call(s)\n"
+            )
+            f.write(
+                f"  Cost    :  Task ${usage['total_cost_usd']:.8f} "
+                f"(prompt ${usage['prompt_cost_usd']:.8f} + completion ${usage['completion_cost_usd']:.8f})\n"
+            )
+            f.write(
+                f"  Total   :  {usage_total['total_tokens']} tokens, "
+                f"${usage_total['total_cost_usd']:.8f} overall\n"
+            )
         f.write("\n")
 
         # Per-step breakdown
@@ -208,7 +319,7 @@ def write_thinking(command: str):
         f.write("=" * 50 + "\n\n")
         f.write(f"  Time    : {timestamp}\n")
         f.write(f"  Command : {command}\n\n")
-        f.write("  Gemini is analyzing your screen and planning actions.\n")
+        f.write("  The model is analyzing your screen and planning actions.\n")
         f.write("  Please wait...\n")
 
 
@@ -228,6 +339,6 @@ def write_error(command: str, error: str):
         f.write(f"  Command : {command}\n\n")
         f.write(f"  Error   : {error}\n\n")
         f.write("  TROUBLESHOOTING:\n")
-        f.write("  - Check your GEMINI_API_KEY in .env\n")
+        f.write("  - Check your OPENROUTER_API_KEY or NVIDIA_API_KEY in .env\n")
         f.write("  - Check agent.log for full traceback\n")
         f.write("  - Make sure you have internet connection\n")

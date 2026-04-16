@@ -221,8 +221,8 @@ APP_MAP = {
     # Browsers
     "chrome":        'start chrome --profile-directory="Profile 3"',
     "google":        'start chrome --profile-directory="Profile 3"',
-    "edge":          "start msedge",
-    "msedge":        "start msedge",
+    "edge":          "start microsoft-edge:",
+    "msedge":        "start microsoft-edge:",
     "firefox":       "start firefox",
     "brave":         "start brave",
 
@@ -265,6 +265,20 @@ WINDOW_TITLES = {
 
 # Create screenshots folder
 os.makedirs("screenshots", exist_ok=True)
+
+
+def _resolve_edge_command() -> str:
+    candidates = []
+    pf_x86 = os.environ.get("PROGRAMFILES(X86)")
+    pf = os.environ.get("PROGRAMFILES")
+    if pf_x86:
+        candidates.append(os.path.join(pf_x86, "Microsoft", "Edge", "Application", "msedge.exe"))
+    if pf:
+        candidates.append(os.path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe"))
+    for path in candidates:
+        if os.path.exists(path):
+            return f'"{path}"'
+    return APP_MAP.get("edge", "start microsoft-edge:")
 
 
 # ── CATEGORY-SPECIFIC FOCUS FUNCTIONS ────────────────────────
@@ -411,6 +425,32 @@ def focus_app_by_category(app_name: str) -> bool:
 def focus_app(app_name: str) -> bool:
     """Legacy focus function - now routes to category-based system"""
     return focus_app_by_category(app_name)
+
+
+def _focus_last_opened_app(action_label: str, strict: bool = False) -> tuple[bool, str]:
+    if not _last_opened_app:
+        return True, ""
+
+    _, settings = get_app_category(_last_opened_app)
+    focused = focus_app_by_category(_last_opened_app)
+    if not focused:
+        time.sleep(settings["focus_delay"])
+        focused = focus_app_by_category(_last_opened_app)
+
+    if focused:
+        time.sleep(settings["action_delay"])
+        return True, ""
+
+    if strict:
+        log_action(action_label, f"Could not focus {_last_opened_app}", "ERROR")
+        return False, f"Could not focus {_last_opened_app}"
+
+    log_action(
+        action_label,
+        f"Could not focus {_last_opened_app}; continuing with current foreground window",
+        "WARNING",
+    )
+    return True, ""
 
 
 # ── HELPER: Find Text on Screen Using OCR ────────────────────
@@ -607,7 +647,10 @@ def execute_action(action: dict) -> tuple[bool, str]:
         # ── OPEN APP ──────────────────────────────────────────
         if act == "open_app":
             app_name = action.get("app", "").lower()
-            exe = APP_MAP.get(app_name, app_name)
+            if app_name in {"edge", "msedge"}:
+                exe = _resolve_edge_command()
+            else:
+                exe = APP_MAP.get(app_name, app_name)
             category, settings = get_app_category(app_name)
 
             log_action("OPEN_APP", f"Opening '{app_name}' (category: {category})")
@@ -712,17 +755,9 @@ def execute_action(action: dict) -> tuple[bool, str]:
             text = action["text"]
             log_action("TYPE", f"Typing: '{text[:50]}...' (len={len(text)})")
 
-            # Focus the target app first
-            if _last_opened_app:
-                _, settings = get_app_category(_last_opened_app)
-                focused = focus_app_by_category(_last_opened_app)
-                if not focused:
-                    time.sleep(settings["focus_delay"])
-                    focused = focus_app_by_category(_last_opened_app)
-                    if not focused:
-                        log_action("TYPE", f"Could not focus {_last_opened_app}", "ERROR")
-                        return False, f"Could not focus {_last_opened_app}"
-                time.sleep(settings["action_delay"])
+            focused, note = _focus_last_opened_app("TYPE")
+            if not focused:
+                return False, note
 
             pyautogui.write(text, interval=0.03)
             return True, f"Typed: '{text}'"
@@ -732,16 +767,9 @@ def execute_action(action: dict) -> tuple[bool, str]:
             text = action["text"]
             log_action("PASTE", f"Pasting: '{text[:50]}...' (len={len(text)})")
 
-            if _last_opened_app:
-                _, settings = get_app_category(_last_opened_app)
-                focused = focus_app_by_category(_last_opened_app)
-                if not focused:
-                    time.sleep(settings["focus_delay"])
-                    focused = focus_app_by_category(_last_opened_app)
-                    if not focused:
-                        log_action("PASTE", f"Could not focus {_last_opened_app}", "ERROR")
-                        return False, f"Could not focus {_last_opened_app}"
-                time.sleep(settings["action_delay"])
+            focused, note = _focus_last_opened_app("PASTE")
+            if not focused:
+                return False, note
 
             _paste_text(text)
             return True, f"Pasted text len={len(text)}"
@@ -788,17 +816,9 @@ def execute_action(action: dict) -> tuple[bool, str]:
             keys = action.get("keys", [])
             log_action("KEY", f"Pressing: {keys}")
 
-            # Focus the target app first
-            if _last_opened_app:
-                _, settings = get_app_category(_last_opened_app)
-                focused = focus_app_by_category(_last_opened_app)
-                if not focused:
-                    time.sleep(settings["focus_delay"])
-                    focused = focus_app_by_category(_last_opened_app)
-                    if not focused:
-                        log_action("KEY", f"Could not focus {_last_opened_app}", "ERROR")
-                        return False, f"Could not focus {_last_opened_app}"
-                time.sleep(settings["action_delay"])
+            focused, note = _focus_last_opened_app("KEY")
+            if not focused:
+                return False, note
 
             if isinstance(keys, list) and len(keys) > 0:
                 pyautogui.hotkey(*keys)

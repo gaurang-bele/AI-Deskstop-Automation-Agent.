@@ -1,0 +1,9 @@
+{
+  "requests": 45,
+  "prompt_tokens": 69350,
+  "completion_tokens": 4553,
+  "total_tokens": 73903,
+  "prompt_cost_usd": 0.010402499999999997,
+  "completion_cost_usd": 0.0027318,
+  "total_cost_usd": 0.0131343
+}

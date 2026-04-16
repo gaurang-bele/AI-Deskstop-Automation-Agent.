@@ -2,6 +2,8 @@ import re
 from typing import Any
 from urllib.parse import quote_plus
 
+EMAIL_REGEX = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+
 
 EMAIL_COMMAND_HINTS = (
     "email",
@@ -87,12 +89,21 @@ def _extract_email_details(command: str) -> dict[str, Any]:
     lower = text.lower()
 
     to_list = _extract_emails_after_keyword(text, "to")
-    cc_list = _extract_emails_after_keyword(text, "cc")
-    bcc_list = _extract_emails_after_keyword(text, "bcc")
+    explicit_cc = _extract_emails_before_target(text, "cc")
+    explicit_bcc = _extract_emails_before_target(text, "bcc")
+    cc_list = explicit_cc if explicit_cc else _extract_emails_after_keyword(text, "cc")
+    bcc_list = explicit_bcc if explicit_bcc else _extract_emails_after_keyword(text, "bcc")
 
-    all_emails = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
+    cc_list = _dedupe(cc_list)
+    bcc_list = _dedupe(bcc_list)
+    cc_set = {item.lower() for item in cc_list}
+    bcc_set = {item.lower() for item in bcc_list}
+
+    to_list = [item for item in _dedupe(to_list) if item.lower() not in cc_set and item.lower() not in bcc_set]
+
+    all_emails = re.findall(EMAIL_REGEX, text)
     if not to_list and all_emails:
-        to_list = [all_emails[0]]
+        to_list = [email for email in all_emails if email.lower() not in cc_set and email.lower() not in bcc_set][:1]
 
     subject = _extract_tagged_value(text, "subject")
     body = _extract_tagged_value(text, "body") or _extract_tagged_value(text, "message")
@@ -148,12 +159,23 @@ def clean_email_intent_text(text: str) -> str:
 
 
 def _extract_emails_after_keyword(text: str, keyword: str) -> list[str]:
-    pattern = rf"\b{keyword}\b\s*[:=]?\s*(.+?)(?=\s+\b(?:to|cc|bcc|subject|body|message|and\s+send|send\b)\b|$)"
+    if keyword == "to":
+        text = re.split(r"\s+\bcc\b|\s+\bbcc\b", text, maxsplit=1, flags=re.IGNORECASE)[0]
+    pattern = rf"\b{keyword}\b\s*[:=]?\s*(.+?)(?=\s+(?:to|cc|bcc|subject|body|message)\b|\s+and\s+send\b|\s+send\b|$)"
     match = re.search(pattern, text, re.IGNORECASE)
     if not match:
         return []
     segment = match.group(1)
-    return re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", segment)
+    return re.findall(EMAIL_REGEX, segment)
+
+
+def _extract_emails_before_target(text: str, target: str) -> list[str]:
+    pattern = rf"((?:{EMAIL_REGEX}\s*(?:,|\band\b)?\s*)+)\s+to\s+{target}\b"
+    matches = re.findall(pattern, text, re.IGNORECASE)
+    emails: list[str] = []
+    for segment in matches:
+        emails.extend(re.findall(EMAIL_REGEX, segment))
+    return emails
 
 
 def _extract_tagged_value(text: str, keyword: str) -> str:

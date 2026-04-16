@@ -17,4 +17,8 @@ open C:\Users\DELL\Downloads\Orders_Table (2).csv and delete rows 2 to 10
 open C:\Users\DELL\Downloads\Orders_Table (2).csv and save the workbook as C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx
 
 
- open google and mail gaurangbele178@gmail.com subject "missing documents for application" body " you have missing documents like aadhar card, pan card etc" send it polish it
+ open google and compose a mail to gaurangbele178@gmail.com also add gaurangbele123@gmail.com to cc and gaurangbele007@gmail.com to bcc. subject "missing documents for application" body " you have missing documents like aadhar card, pan card etc" send it polish it
+
+
+
+ open google and fetch information about bmw, its diffrent models and there price, top speeds, diffrent color options
