@@ -3,6 +3,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 EMAIL_REGEX = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+WINDOWS_PATH_REGEX = r"[A-Za-z]:\\(?:[^\\/:*?\"<>|\r\n]+\\)*[^\\/:*?\"<>|\r\n]+\.[A-Za-z0-9]{1,8}"
 
 
 EMAIL_COMMAND_HINTS = (
@@ -36,6 +37,7 @@ def parse_email_request(command: str) -> dict[str, Any]:
 
 def build_email_actions(details: dict[str, Any]) -> list[dict[str, Any]]:
     to_list = details.get("to", [])
+    attachments = details.get("attachments", [])
 
     compose_url = _build_gmail_compose_url(
         to=to_list,
@@ -44,16 +46,28 @@ def build_email_actions(details: dict[str, Any]) -> list[dict[str, Any]]:
         cc=details.get("cc", []),
         bcc=details.get("bcc", []),
     )
+    details["compose_url"] = compose_url
 
     actions: list[dict[str, Any]] = [
         {"action": "open_app", "app": details.get("browser", "chrome")},
         {"action": "wait", "seconds": 2},
-        {"action": "press_key", "keys": ["ctrl", "l"]},
-        {"action": "paste_text", "text": compose_url},
-        {"action": "press_key", "keys": ["enter"]},
+        {"action": "open_url", "url": compose_url, "app": details.get("browser", "chrome")},
         {"action": "wait", "seconds": 4},
         {"action": "screenshot", "label": "gmail_compose_ready"},
     ]
+
+    for index, attachment in enumerate(attachments, start=1):
+        actions.extend(
+            [
+                {
+                    "action": "attach_file",
+                    "path": attachment,
+                    "compose_url": compose_url,
+                    "browser": details.get("browser", "chrome"),
+                },
+                {"action": "screenshot", "label": f"gmail_attachment_{index}"},
+            ]
+        )
 
     if details.get("send") and to_list:
         actions.extend(
@@ -71,7 +85,7 @@ def build_email_actions(details: dict[str, Any]) -> list[dict[str, Any]]:
 def validate_email_actions(actions: list[dict[str, Any]]) -> tuple[bool, str]:
     if not isinstance(actions, list) or not actions:
         return False, "No email actions were produced."
-    required = {"open_app", "wait", "press_key", "paste_text"}
+    required = {"open_app", "wait", "open_url"}
     names = {item.get("action") for item in actions if isinstance(item, dict)}
     missing = sorted(required - names)
     if missing:
@@ -107,6 +121,7 @@ def _extract_email_details(command: str) -> dict[str, Any]:
 
     subject = _extract_tagged_value(text, "subject")
     body = _extract_tagged_value(text, "body") or _extract_tagged_value(text, "message")
+    attachments = _extract_attachment_paths(text)
 
     if not subject:
         about_match = re.search(r"\babout\s+(.+?)(?=\s+(?:with|saying|that|to|and\s+send|send\b)|$)", text, re.IGNORECASE)
@@ -126,6 +141,7 @@ def _extract_email_details(command: str) -> dict[str, Any]:
         subject = "Quick update"
     if not body:
         body = clean_email_intent_text(text)
+    body = _strip_attachment_clause(body)
 
     browser = "chrome"
     if "edge" in lower:
@@ -142,6 +158,7 @@ def _extract_email_details(command: str) -> dict[str, Any]:
         "subject": subject,
         "body": body,
         "browser": browser,
+        "attachments": _dedupe(attachments),
         "send": send,
         "model_polish": wants_model_polish(text),
         "raw_text": text,
@@ -153,6 +170,8 @@ def clean_email_intent_text(text: str) -> str:
     cleaned = re.sub(r"\b(?:send\s+to\s+model|polish|professionalize|professionalise)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(?:open\s+\w+\s+go\s+to\s+gmail\s+and\s+compose\s+(?:a\s+)?mail)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(?:send|send\s+it|send\s+now|do\s+not\s+send|don't\s+send|dont\s+send)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = _strip_attachment_clause(cleaned)
+    cleaned = re.sub(WINDOWS_PATH_REGEX, "", cleaned)
     cleaned = re.sub(r"\b(?:to|cc|bcc|subject|body|message)\b\s*[:=]?\s*[^\n]+", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
     return cleaned
@@ -179,7 +198,10 @@ def _extract_emails_before_target(text: str, target: str) -> list[str]:
 
 
 def _extract_tagged_value(text: str, keyword: str) -> str:
-    tail_stop = r"(?:to|cc|bcc|subject|body|message|and\s+send|send\s+it|send\s+now|send\s+email|do\s+not\s+send|don't\s+send|dont\s+send)"
+    tail_stop = (
+        r"(?:to|cc|bcc|subject|body|message|and\s+send|send\s+it|send\s+now|send\s+email|"
+        r"do\s+not\s+send|don't\s+send|dont\s+send|send\s+to\s+model|polish|professionalize|professionalise)"
+    )
     quoted = re.search(
         rf"\b{keyword}\b\s*[:=]?\s*[\"'](.+?)[\"'](?=\s+\b{tail_stop}\b|$)",
         text,
@@ -210,6 +232,41 @@ def _strip_send_tail(text: str) -> str:
         flags=re.IGNORECASE,
     )
     return cleaned.strip(" .")
+
+
+def _extract_attachment_paths(text: str) -> list[str]:
+    if not text:
+        return []
+
+    segments = []
+    keyword_matches = re.findall(
+        r"\b(?:attach(?:ed)?|attachment|attach\s+the\s+file|attach\s+file|file\s+from)\b(.+?)(?=\s+\b(?:to|cc|bcc|subject|body|message|and\s+send|send\b|send\s+to\s+model|polish|professionalize|professionalise)\b|$)",
+        text,
+        re.IGNORECASE,
+    )
+    segments.extend(keyword_matches)
+    if not segments and re.search(r"\b(?:attach|attachment)\b", text, re.IGNORECASE):
+        segments.append(text)
+
+    found: list[str] = []
+    for segment in segments:
+        found.extend(re.findall(WINDOWS_PATH_REGEX, segment))
+
+    quoted = re.findall(r"[\"']([A-Za-z]:\\[^\"']+\.[A-Za-z0-9]{1,8})[\"']", text)
+    found.extend(quoted)
+    return _dedupe([path.replace("\\\\", "\\").strip() for path in found if path.strip()])
+
+
+def _strip_attachment_clause(text: str) -> str:
+    if not text:
+        return text
+    cleaned = re.sub(
+        r"\b(?:attach(?:ed)?|attachment|attach\s+the\s+file|attach\s+file|file\s+from)\b.+?(?=\s+\b(?:to|cc|bcc|subject|body|message|and\s+send|send\b|send\s+to\s+model|polish|professionalize|professionalise)\b|$)",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", cleaned).strip(" .")
 
 
 def _build_gmail_compose_url(

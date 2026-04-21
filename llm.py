@@ -223,6 +223,189 @@ def get_screenshot_base64() -> str:
     # .decode()   → base64 bytes → UTF-8 string
 
 
+def locate_ui_target(target_description: str) -> tuple[int, int] | None:
+    """
+    Use vision LLM to locate a UI target on current screen.
+    Returns absolute screen pixel coordinates (x, y) or None.
+    """
+    _ensure_provider_ready()
+
+    img = ImageGrab.grab()
+    width, height = img.size
+    probe_path = "screen_locate.png"
+    img.save(probe_path)
+    with open(probe_path, "rb") as f:
+        screenshot_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    prompt = f"""
+You are helping a desktop automation agent click one target on screen.
+
+Target to find: {target_description}
+Image size: width={width}, height={height}
+
+Return ONLY valid JSON with normalized coordinates in range 0..1000:
+{{"x_norm": <int>, "y_norm": <int>, "confidence": <float>}}
+
+Rules:
+- If the target is visible, estimate its clickable center.
+- If not visible, return: {{"x_norm": -1, "y_norm": -1, "confidence": 0.0}}
+- No markdown, no extra text.
+"""
+    _log_prompt("locate_ui_target", prompt, {"target_description": target_description})
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
+                ],
+            }
+        ],
+        "max_tokens": 120,
+        "temperature": 0.0,
+        "stream": False,
+    }
+
+    response = requests.post(INVOKE_URL, headers=HEADERS, json=payload, timeout=60)
+    response.raise_for_status()
+    data = response.json()
+    _record_usage(data)
+
+    raw = data["choices"][0]["message"]["content"].strip()
+    raw = re.sub(r"```json|```", "", raw).strip()
+    parsed = json.loads(raw)
+
+    x_norm = int(parsed.get("x_norm", -1))
+    y_norm = int(parsed.get("y_norm", -1))
+    confidence = float(parsed.get("confidence", 0.0))
+
+    if x_norm < 0 or y_norm < 0 or confidence <= 0.0:
+        return None
+
+    x_norm = max(0, min(1000, x_norm))
+    y_norm = max(0, min(1000, y_norm))
+    x = int((x_norm / 1000.0) * width)
+    y = int((y_norm / 1000.0) * height)
+    return (x, y)
+
+
+def plan_browser_action(
+    goal: str,
+    url: str,
+    title: str,
+    dom_text: str,
+    screenshot_b64: str,
+    history: list[dict[str, str]] | None = None,
+    last_error: str | None = None,
+) -> dict:
+    _ensure_provider_ready()
+    history_block = ""
+    if history:
+        trimmed = history[-6:]
+        history_lines = [f"- {item.get('action')}: {item.get('note')}" for item in trimmed]
+        history_block = "Recent actions:\n" + "\n".join(history_lines) + "\n\n"
+
+    error_block = f"Last error: {last_error}\n\n" if last_error else ""
+
+    prompt = f"""
+You are a web automation planner. Decide the next best browser action to achieve the goal.
+
+Goal: {goal}
+Current URL: {url}
+Page title: {title}
+
+{history_block}{error_block}
+DOM text (truncated):
+{dom_text[:12000]}
+
+Return ONLY valid JSON with one of these actions:
+1) navigate: {{"action":"navigate","url":"https://..."}}
+2) click: {{"action":"click","selector":"CSS_SELECTOR","note":"why"}}
+3) fill: {{"action":"fill","selector":"CSS_SELECTOR","text":"...","note":"why"}}
+4) press: {{"action":"press","keys":"Control+Enter","note":"why"}}
+5) wait: {{"action":"wait","seconds":2,"note":"why"}}
+6) done: {{"action":"done","note":"goal achieved"}}
+
+Rules:
+- Prefer stable selectors (aria-label, name, role, data-testid).
+- If login/OTP/captcha is required, return done with note explaining requirement.
+- If the next step is unclear, return wait for a short time.
+- No markdown, no extra text.
+"""
+    _log_prompt("browser_plan_action", prompt, {"goal": goal, "url": url})
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
+                ],
+            }
+        ],
+        "max_tokens": 240,
+        "temperature": 0.0,
+        "stream": False,
+    }
+    response = requests.post(INVOKE_URL, headers=HEADERS, json=payload, timeout=60)
+    response.raise_for_status()
+    data = response.json()
+    _record_usage(data)
+    raw = data["choices"][0]["message"]["content"].strip()
+    raw = re.sub(r"```json|```", "", raw).strip()
+    return json.loads(raw)
+
+
+def validate_browser_goal(
+    goal: str,
+    url: str,
+    title: str,
+    dom_text: str,
+    screenshot_b64: str,
+) -> bool:
+    _ensure_provider_ready()
+    prompt = f"""
+Determine whether the goal is complete based on the page.
+
+Goal: {goal}
+Current URL: {url}
+Page title: {title}
+
+DOM text (truncated):
+{dom_text[:8000]}
+
+Answer with ONLY one word: SUCCESS or FAILURE.
+"""
+    _log_prompt("browser_validate", prompt, {"goal": goal, "url": url})
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
+                ],
+            }
+        ],
+        "max_tokens": 10,
+        "temperature": 0.0,
+        "stream": False,
+    }
+    response = requests.post(INVOKE_URL, headers=HEADERS, json=payload, timeout=60)
+    response.raise_for_status()
+    data = response.json()
+    _record_usage(data)
+    result = data["choices"][0]["message"]["content"].strip().upper()
+    return "SUCCESS" in result
+
+
 # ── FUNCTION 2: Get Action Plan from NVIDIA Model ────────────
 
 def get_action_plan(command: str, memory_context: str = "") -> list:
@@ -751,20 +934,20 @@ Return ONLY valid JSON object:
 
 Rules:
 - Include only fields from requested sections.
-- 1 to 4 concise facts per field.
+- 3 to 8 concise facts per field when possible.
 - Keep facts factual and directly grounded in provided text.
 - If a field has no clear evidence, omit it.
 - No markdown, no commentary, JSON only.
 
 Web page text:
-{page_text[:16000]}
+{page_text[:24000]}
 """
     _log_prompt("research_findings", prompt, {"query": query, "fields": fields})
 
     payload = {
         "model": MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 900,
+        "max_tokens": 1400,
         "temperature": 0.10,
         "top_p": 0.80,
         "stream": False,
@@ -790,7 +973,7 @@ Web page text:
             continue
         normalized = [str(v).strip() for v in values if str(v).strip()]
         if normalized:
-            cleaned[field] = normalized[:4]
+            cleaned[field] = normalized[:8]
     return cleaned
 
 

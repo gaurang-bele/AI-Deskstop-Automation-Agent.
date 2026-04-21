@@ -26,6 +26,17 @@ class AgentRoutingTests(unittest.TestCase):
     def test_research_browser_honors_edge_request(self):
         self.assertEqual(_browser_for_command("open edge and fetch information about 0603YG105ZAT4A"), "edge")
 
+    def test_parse_research_request_extracts_explicit_fields_after_its(self):
+        query, fields, output_file = _parse_research_request(
+            "open google and fetch information about 0603YG105ZAT2A, its Voltage, Temperature Coefficient, Operating Temperature"
+        )
+        self.assertEqual(query, "0603YG105ZAT2A")
+        self.assertIn("overview", fields)
+        self.assertIn("voltage", fields)
+        self.assertIn("temperature coefficient", fields)
+        self.assertIn("operating temperature", fields)
+        self.assertEqual(output_file, "response.txt")
+
 
 if __name__ == "__main__":
     unittest.main()

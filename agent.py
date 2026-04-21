@@ -30,6 +30,9 @@
 import time
 # time → used in the main loop (time.sleep keeps it alive)
 
+import threading
+import hashlib
+
 import logging
 # logging → we set up a log file here so ALL modules write
 # to the same agent.log file
@@ -39,6 +42,7 @@ import re
 import json
 import datetime
 import requests
+import io
 from urllib.parse import quote_plus, urlparse, parse_qs, unquote
 from base64 import b64decode
 # os → used to create initial files and folders on startup
@@ -55,7 +59,7 @@ from llm       import (
     log_external_prompt,
     verify_step,
 )  # model planner
-from executor  import execute_action, get_clipboard_text   # action runner
+from executor  import execute_action   # action runner
 from excel_automation import (
     EXCEL_ACTIONS,
     is_excel_command,
@@ -71,6 +75,19 @@ from email_automation import (
     wants_model_polish,
 )
 from responder import write_response, write_thinking, write_error, write_research_report
+try:
+    from playwright_email import send_gmail_with_playwright
+except Exception:
+    send_gmail_with_playwright = None
+
+try:
+    from browser_agent import run_agentic_browse
+except Exception:
+    run_agentic_browse = None
+try:
+    from gmail_api import send_gmail_with_api
+except Exception:
+    send_gmail_with_api = None
 # Each import pulls the function we defined in those files
 
 
@@ -84,6 +101,7 @@ GENERIC_ACTIONS = {
     "click_text",
     "type_text",
     "paste_text",
+    "attach_file",
     "press_key",
     "scroll",
     "wait",
@@ -99,6 +117,14 @@ def _get_excel_mode() -> str:
     mode = os.getenv("AGENT_EXCEL_MODE", "hybrid").strip().lower()
     if mode not in {"ui", "hybrid", "structured"}:
         return "hybrid"
+    return mode
+
+
+def _get_email_mode() -> str:
+    """Choose email delivery strategy: api, playwright, or ui."""
+    mode = os.getenv("AGENT_EMAIL_MODE", "api").strip().lower()
+    if mode not in {"api", "playwright", "ui"}:
+        return "api"
     return mode
 
 
@@ -134,6 +160,19 @@ def _is_web_research_command(command: str) -> bool:
     return ("google" in lower or "search" in lower) and any(term in lower for term in detail_terms)
 
 
+def _is_agentic_browse_command(command: str) -> bool:
+    lowered = (command or "").strip().lower()
+    return lowered.startswith("browse:") or lowered.startswith("web:") or lowered.startswith("agentic:")
+
+
+def _strip_agentic_prefix(command: str) -> str:
+    lowered = (command or "").strip()
+    for prefix in ("browse:", "web:", "agentic:"):
+        if lowered.lower().startswith(prefix):
+            return lowered[len(prefix):].strip()
+    return lowered
+
+
 def _parse_research_request(command: str) -> tuple[str, list[str], str]:
     lower = command.lower()
 
@@ -149,15 +188,72 @@ def _parse_research_request(command: str) -> tuple[str, list[str], str]:
         "history": ("history", "background", "origin"),
         "founder": ("founder", "founded by", "creator"),
         "specifications": ("specification", "specifications", "specs", "features"),
+        "voltage": ("voltage", "voltage rating", "rated voltage", "wv", "working voltage"),
+        "temperature coefficient": (
+            "temperature coefficient",
+            "temp coefficient",
+            "tempco",
+            "tcc",
+            "ppm/°c",
+            "ppm/ c",
+            "ppm/degc",
+        ),
+        "operating temperature": (
+            "operating temperature",
+            "operating temp",
+            "temperature range",
+            "temp range",
+            "-55",
+            "+125",
+        ),
+        "capacitance": ("capacitance",),
+        "tolerance": ("tolerance",),
+        "package": ("package", "size", "case"),
         "models": ("model", "models", "variants"),
         "top speed": ("top speed", "speed", "max speed"),
         "color options": ("color", "colours", "colors", "colour options", "color options"),
     }
-    fields = [name for name, aliases in field_aliases.items() if any(alias in lower for alias in aliases)]
-    if fields:
-        fields = ["overview"] + fields
-    else:
-        fields = ["overview", "key facts", "common uses"]
+
+    def _extract_custom_fields(text: str) -> list[str]:
+        match = re.search(r"\bits\b\s+([^\.]+)$", text, re.IGNORECASE)
+        if not match:
+            match = re.search(r"\bincluding\b\s+([^\.]+)$", text, re.IGNORECASE)
+        if not match:
+            return []
+        tail = match.group(1)
+        tail = re.sub(r"\s+and\s+(?:save|write|paste|put)\b.*$", "", tail, flags=re.IGNORECASE)
+        tail = tail.strip(" .")
+        if not tail:
+            return []
+        parts = re.split(r",|\band\b", tail, flags=re.IGNORECASE)
+        cleaned: list[str] = []
+        for part in parts:
+            field = re.sub(r"[^a-zA-Z0-9 %/°µ+-]+", " ", part).strip().lower()
+            field = re.sub(r"\s+", " ", field).strip()
+            if not field or len(field) < 3:
+                continue
+            if field not in cleaned:
+                cleaned.append(field)
+        return cleaned[:6]
+
+    custom_fields = _extract_custom_fields(command)
+    alias_fields = [name for name, aliases in field_aliases.items() if any(alias in lower for alias in aliases)]
+    fields: list[str] = []
+
+    if custom_fields:
+        normalized: list[str] = []
+        for field in custom_fields:
+            mapped = None
+            for canonical, aliases in field_aliases.items():
+                if canonical in {"models", "top speed", "color options"}:
+                    continue
+                if field == canonical or any(alias == field for alias in aliases):
+                    mapped = canonical
+                    break
+            normalized.append(mapped or field)
+        fields = ["overview"] + [f for f in normalized if f != "overview"]
+    elif alias_fields:
+        fields = ["overview"] + alias_fields
 
     query = command
     for pattern in (r"\brelated to\s+(.+)", r"\babout\s+(.+)", r"\bon\s+(.+)", r"\bregarding\s+(.+)", r"\bfor\s+(.+)"):
@@ -167,8 +263,32 @@ def _parse_research_request(command: str) -> tuple[str, list[str], str]:
             break
     query = re.sub(r"\s+and\s+(?:save|write|paste|put)\b.*$", "", query, flags=re.IGNORECASE).strip(" .")
     query = re.sub(r"\s+in(?:to)?\s+[a-zA-Z0-9_.-]+\.txt$", "", query, flags=re.IGNORECASE).strip(" .")
+    query = re.split(r"\b(?:its|including)\b", query, maxsplit=1, flags=re.IGNORECASE)[0].strip(" ,.")
     if not query:
         query = command.strip()
+
+    if not custom_fields and not alias_fields:
+        if _looks_like_part_number(query):
+            fields = [
+                "overview",
+                "voltage",
+                "temperature coefficient",
+                "operating temperature",
+                "capacitance",
+                "tolerance",
+                "package",
+            ]
+        else:
+            fields = ["overview", "key facts", "common uses"]
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in fields:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    fields = deduped
 
     return query, fields, output_file
 
@@ -279,14 +399,9 @@ def _search_url_for_command(command: str, query: str, fields: list[str]) -> str:
 
 
 def _search_results_urls(query: str, limit: int = 3) -> list[str]:
-    raw_query = (query or "").strip()
-    if raw_query:
-        wiki_token = quote_plus(raw_query.replace(",", " "))
-        return [
-            f"https://en.wikipedia.org/w/index.php?search={wiki_token}",
-            f"https://www.wikidata.org/w/index.php?search={wiki_token}",
-            f"https://www.britannica.com/search?query={wiki_token}",
-        ][:limit]
+    # Intentionally no Wikipedia/Wikidata shortcut.
+    # It caused many technical / part-number queries to fail because those sites
+    # rarely contain the required specifications.
 
     def _query_keywords(value: str) -> list[str]:
         stop_words = {
@@ -313,7 +428,7 @@ def _search_results_urls(query: str, limit: int = 3) -> list[str]:
             if token in lower:
                 score += 1
         # De-prioritize low-signal community pages, but don't fully drop them.
-        if any(bad in lower for bad in ("forum", "forums", "thread", "tapatalk", "boardreader")):
+        if any(bad in lower for bad in ("forum", "forums", "thread", "tapatalk", "boardreader", "reddit.com", "quora.com")):
             score -= 1
         return score
 
@@ -410,13 +525,10 @@ def _search_results_urls(query: str, limit: int = 3) -> list[str]:
     if relevant:
         return relevant
 
-    # Fallback: if relevance is weak, still return best-ranked non-blocked Bing links.
-    scored_results.sort(key=lambda item: item[0], reverse=True)
-    fallback = [url for _, url in scored_results][:limit]
-    if fallback:
-        return fallback
+    # If relevance is weak (no keyword hits), avoid returning junk; try other engines first.
+    max_score = max([score for score, _ in scored_results], default=-1)
 
-    # Final fallback: DuckDuckGo HTML search to avoid empty/irrelevant RSS returns.
+    # Fallback: DuckDuckGo HTML search to avoid empty/irrelevant RSS returns.
     try:
         ddg_links = _from_duckduckgo_html(query)
         if ddg_links:
@@ -426,9 +538,9 @@ def _search_results_urls(query: str, limit: int = 3) -> list[str]:
                 key=lambda item: item[0],
                 reverse=True,
             )
-            ddg_ranked = [url for _, url in ddg_scored][:limit]
-            if ddg_ranked:
-                return ddg_ranked
+            ddg_positive = [url for score, url in ddg_scored if score > 0][:limit]
+            if ddg_positive:
+                return ddg_positive
     except Exception:
         pass
 
@@ -451,7 +563,7 @@ def _search_results_urls(query: str, limit: int = 3) -> list[str]:
                         continue
                     if any(bad in lower for bad in blocked):
                         continue
-                    if _url_relevance_score(match, _query_keywords(query)) < 0:
+                    if _url_relevance_score(match, _query_keywords(query)) <= 0:
                         continue
                     if match not in collected:
                         collected.append(match)
@@ -460,13 +572,16 @@ def _search_results_urls(query: str, limit: int = 3) -> list[str]:
     except Exception:
         pass
 
-    if scored_results:
-        return [url for _, url in scored_results][:limit]
+    # Final fallback: return best-ranked Bing links only if we have *some* signal.
+    if scored_results and max_score > 0:
+        scored_results.sort(key=lambda item: item[0], reverse=True)
+        return [url for score, url in scored_results if score > 0][:limit]
 
-    return fallback
+    # If nothing looks relevant, return empty rather than unrelated URLs.
+    return []
 
 
-def _merge_findings(base: dict[str, list[str]], incoming: dict[str, list[str]], limit: int = 4) -> dict[str, list[str]]:
+def _merge_findings(base: dict[str, list[str]], incoming: dict[str, list[str]], limit: int = 8) -> dict[str, list[str]]:
     merged: dict[str, list[str]] = {k: list(v) for k, v in base.items()}
     for field, values in (incoming or {}).items():
         existing = merged.get(field, [])
@@ -480,9 +595,61 @@ def _merge_findings(base: dict[str, list[str]], incoming: dict[str, list[str]], 
     return merged
 
 
+def _looks_like_part_number(value: str) -> bool:
+    token = re.sub(r"\s+", "", (value or "").strip())
+    if len(token) < 8:
+        return False
+    if not re.search(r"[A-Za-z]", token) or not re.search(r"\d", token):
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9._/-]+", token))
+
+
+def _findings_complete(findings: dict[str, list[str]], fields: list[str], min_per_field: int = 3) -> bool:
+    if not fields:
+        return True
+    for field in fields:
+        if field == "overview":
+            continue
+        if len(findings.get(field, [])) < min_per_field:
+            return False
+    return True
+
+
+def _part_number_source_urls(part_number: str) -> list[str]:
+    token = (part_number or "").strip()
+    if not token:
+        return []
+    q = quote_plus(token)
+    return [
+        f"https://www.alldatasheet.com/view.jsp?Searchword={q}",
+        f"https://octopart.com/search?q={q}",
+        f"https://www.mouser.com/c/?q={q}",
+        f"https://www.digikey.com/en/products/result?s={q}",
+        f"https://www.murata.com/en-global/search/results?search={q}",
+    ]
+
+
 def _extract_text_from_url(url: str) -> str:
     if not url:
         return ""
+
+    def _extract_text_from_pdf_bytes(data: bytes) -> str:
+        try:
+            from pypdf import PdfReader  # type: ignore
+        except Exception:
+            return ""
+        try:
+            reader = PdfReader(io.BytesIO(data))
+            chunks: list[str] = []
+            for page in reader.pages[:8]:
+                text = page.extract_text() or ""
+                text = text.strip()
+                if text:
+                    chunks.append(text)
+            return "\n".join(chunks)
+        except Exception:
+            return ""
+
     normalized = url.strip()
     if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", normalized):
         normalized = f"https://{normalized}"
@@ -493,6 +660,12 @@ def _extract_text_from_url(url: str) -> str:
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AiAgent/1.0"},
         )
         response.raise_for_status()
+        content_type = (response.headers.get("Content-Type") or "").lower()
+        if "pdf" in content_type or normalized.lower().endswith(".pdf"):
+            pdf_text = _extract_text_from_pdf_bytes(response.content)
+            pdf_text = re.sub(r"\s+", " ", pdf_text).strip()
+            if pdf_text:
+                return pdf_text[:20000]
         html = response.text
     except Exception:
         # Reader fallback helps with pages blocked by anti-bot / 403 protections.
@@ -535,6 +708,62 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
+
+
+_COMMAND_DEDUPE_LOCK = threading.Lock()
+_LAST_COMMAND_FINGERPRINT = ""
+_LAST_COMMAND_TS = 0.0
+
+_EMAIL_DEDUPE_LOCK = threading.Lock()
+_RECENT_EMAIL_FINGERPRINTS: dict[str, float] = {}
+
+
+def _fingerprint_payload(payload: dict) -> str:
+    dumped = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(dumped.encode("utf-8")).hexdigest()
+
+
+def _should_suppress_duplicate_command(command: str, window_seconds: float = 2.0) -> bool:
+    global _LAST_COMMAND_FINGERPRINT, _LAST_COMMAND_TS
+    now = time.monotonic()
+    candidate = _fingerprint_payload({"command": (command or "").strip()})
+    with _COMMAND_DEDUPE_LOCK:
+        if candidate and candidate == _LAST_COMMAND_FINGERPRINT and (now - _LAST_COMMAND_TS) < window_seconds:
+            return True
+        _LAST_COMMAND_FINGERPRINT = candidate
+        _LAST_COMMAND_TS = now
+        return False
+
+
+def _should_suppress_duplicate_email(details: dict, window_seconds: float = 120.0) -> bool:
+    """Best-effort guard against double-trigger sends (e.g., watcher fires twice).
+
+    If the exact same email payload is requested again inside the window,
+    suppress the second send.
+    """
+    if not details.get("send"):
+        return False
+
+    payload = {
+        "to": details.get("to") or [],
+        "cc": details.get("cc") or [],
+        "bcc": details.get("bcc") or [],
+        "subject": details.get("subject") or "",
+        "body": details.get("body") or "",
+        "attachments": details.get("attachments") or [],
+        "mode": _get_email_mode(),
+    }
+    fp = _fingerprint_payload(payload)
+    now = time.monotonic()
+    with _EMAIL_DEDUPE_LOCK:
+        expired = [key for key, ts in _RECENT_EMAIL_FINGERPRINTS.items() if (now - ts) > window_seconds]
+        for key in expired:
+            _RECENT_EMAIL_FINGERPRINTS.pop(key, None)
+
+        if fp in _RECENT_EMAIL_FINGERPRINTS:
+            return True
+        _RECENT_EMAIL_FINGERPRINTS[fp] = now
+        return False
 
 
 # ── STARTUP INITIALIZATION ────────────────────────────────────
@@ -598,6 +827,28 @@ def on_command(command: str):
     # response.txt right away, you see progress, not old result
     write_thinking(command)
 
+    # Guard against rapid duplicate triggers (e.g., file watcher fires twice for one save).
+    if _should_suppress_duplicate_command(command):
+        print("[AGENT] 🛑 Duplicate command trigger suppressed (debounce).")
+        usage_after = get_usage_totals()
+        write_response(
+            command=command,
+            actions=[{"action": "debounce"}],
+            results=[
+                {
+                    "step": 1,
+                    "action": "debounce",
+                    "params": {"action": "debounce"},
+                    "success": True,
+                    "note": "Duplicate trigger suppressed",
+                }
+            ],
+            llm_usage={},
+            llm_usage_total=usage_after,
+            llm_last_call=get_last_call_usage(),
+        )
+        return
+
     try:
         usage_before = get_usage_totals()
         memory_context = _memory_context()
@@ -605,15 +856,44 @@ def on_command(command: str):
         excel_request = is_excel_command(command)
         email_request = is_email_command(command)
         research_request = _is_web_research_command(command)
+        agentic_request = _is_agentic_browse_command(command)
         actions = None
 
         # ── STEP 2: Build Action Plan ───────────────────────
+        if agentic_request:
+            goal = _strip_agentic_prefix(command)
+            print("[AGENT] 🧭 Agentic browser command detected - using Playwright loop...")
+            if run_agentic_browse is None:
+                raise Exception("Agentic browsing requires Playwright dependencies. Install with: pip install -r requirements.txt")
+            actions, results, error = run_agentic_browse(goal)
+            usage_after = get_usage_totals()
+            usage_delta = _usage_delta(usage_before, usage_after)
+            write_response(
+                command=command,
+                actions=actions or [{"action": "agentic_browse", "goal": goal}],
+                results=results,
+                llm_usage=usage_delta,
+                llm_usage_total=usage_after,
+                llm_last_call=get_last_call_usage(),
+            )
+            status = "SUCCESS" if not error else "PARTIAL"
+            summary = "agentic browse complete" if not error else f"agentic browse error: {error}"
+            _append_memory_entry(command=command, status=status, summary=summary, usage_delta=usage_delta)
+            return
+
         if research_request:
             print("[AGENT] 🌐 Web research command detected - using headless fetch flow...")
             query, fields, output_file = _parse_research_request(command)
             browser = _browser_for_command(command)
             search_query = f"{query} {_research_query_suffix(fields)}"
-            search_url = _search_url_for_command(command, query, fields)
+            if _looks_like_part_number(query) and "datasheet" not in search_query.lower():
+                search_query = f"{search_query} datasheet specifications"
+            # Use the enriched search_query directly so the on-screen search
+            # aligns with the headless extraction query.
+            if "bing" in command.lower():
+                search_url = f"bing.com/search?q={quote_plus(search_query)}"
+            else:
+                search_url = f"google.com/search?q={quote_plus(search_query)}"
             log_external_prompt(
                 "research_headless_flow",
                 f"query={query} fields={fields} browser={browser} search_url={search_url}",
@@ -635,84 +915,27 @@ def on_command(command: str):
                     }
                 )
                 if success:
-                    tab_success, tab_note = execute_action({"action": "press_key", "keys": ["ctrl", "t"]})
+                    nav_success, nav_note = execute_action({"action": "open_url", "url": search_url, "app": browser})
                     step_counter += 1
                     results.append(
                         {
                             "step": step_counter,
-                            "action": "press_key",
-                            "params": {"action": "press_key", "keys": ["ctrl", "t"]},
-                            "success": tab_success,
-                            "note": tab_note or "Opened new tab",
+                            "action": "open_url",
+                            "params": {"action": "open_url", "url": search_url, "app": browser},
+                            "success": nav_success,
+                            "note": nav_note or "Opened search URL",
                         }
                     )
-                    if tab_success:
-                        # Redundant address-bar focusing to avoid typing into page search boxes.
-                        focus_success, focus_note = execute_action({"action": "press_key", "keys": ["ctrl", "l"]})
-                        step_counter += 1
-                        results.append(
-                            {
-                                "step": step_counter,
-                                "action": "press_key",
-                                "params": {"action": "press_key", "keys": ["ctrl", "l"]},
-                                "success": focus_success,
-                                "note": focus_note or "Focused address bar (Ctrl+L)",
-                            }
-                        )
-                        alt_success, alt_note = execute_action({"action": "press_key", "keys": ["alt", "d"]})
-                        step_counter += 1
-                        results.append(
-                            {
-                                "step": step_counter,
-                                "action": "press_key",
-                                "params": {"action": "press_key", "keys": ["alt", "d"]},
-                                "success": alt_success,
-                                "note": alt_note or "Focused address bar (Alt+D)",
-                            }
-                        )
-                        paste_success, paste_note = execute_action({"action": "paste_text", "text": search_url})
-                        step_counter += 1
-                        results.append(
-                            {
-                                "step": step_counter,
-                                "action": "paste_text",
-                                "params": {"action": "paste_text", "text": search_url},
-                                "success": paste_success,
-                                "note": paste_note or "Pasted search URL",
-                            }
-                        )
-                        enter_success, enter_note = execute_action({"action": "press_key", "keys": ["enter"]})
-                        step_counter += 1
-                        results.append(
-                            {
-                                "step": step_counter,
-                                "action": "press_key",
-                                "params": {"action": "press_key", "keys": ["enter"]},
-                                "success": enter_success,
-                                "note": enter_note or "Pressed Enter",
-                            }
-                        )
-                        wait_success, wait_note = execute_action({"action": "wait", "seconds": 1})
+                    if nav_success:
+                        wait_success, wait_note = execute_action({"action": "wait", "seconds": 2})
                         step_counter += 1
                         results.append(
                             {
                                 "step": step_counter,
                                 "action": "wait",
-                                "params": {"action": "wait", "seconds": 1},
+                                "params": {"action": "wait", "seconds": 2},
                                 "success": wait_success,
                                 "note": wait_note or "Waited for navigation",
-                            }
-                        )
-                        # Some browsers ignore the first Enter when focus was not in the omnibox.
-                        enter2_success, enter2_note = execute_action({"action": "press_key", "keys": ["enter"]})
-                        step_counter += 1
-                        results.append(
-                            {
-                                "step": step_counter,
-                                "action": "press_key",
-                                "params": {"action": "press_key", "keys": ["enter"]},
-                                "success": enter2_success,
-                                "note": enter2_note or "Pressed Enter (retry)",
                             }
                         )
 
@@ -722,7 +945,12 @@ def on_command(command: str):
             findings: dict[str, list[str]] = {}
             error_msg = None
             try:
-                urls = _search_results_urls(search_query, limit=3)
+                if _looks_like_part_number(query):
+                    urls.extend(_part_number_source_urls(query))
+                search_urls = _search_results_urls(search_query, limit=5)
+                for candidate in search_urls:
+                    if candidate not in urls:
+                        urls.append(candidate)
                 sources = [{"title": "", "url": url} for url in urls]
             except Exception as search_error:
                 error_msg = f"Headless search failed: {search_error}"
@@ -737,12 +965,11 @@ def on_command(command: str):
                     continue
                 partial = get_research_findings(query, fields, page_text)
                 findings = _merge_findings(findings, partial)
-                if len(findings) >= len(fields):
+                if _findings_complete(findings, fields, min_per_field=3):
                     break
+
             if not findings and not error_msg:
                 error_msg = "Could not extract requested details from fetched sources."
-            if not findings:
-                findings = _extract_findings_from_clipboard("", fields, query=query)
             usage_after = get_usage_totals()
             usage_delta = _usage_delta(usage_before, usage_after)
             write_research_report(
@@ -770,8 +997,8 @@ def on_command(command: str):
         # both structured and natural-language requests.
         elif email_request:
             print("[AGENT] 📧 Email command detected - building Gmail action plan...")
+            details = parse_email_request(command)
             if wants_model_polish(command):
-                details = parse_email_request(command)
                 raw_intent = details.get("body") or details.get("raw_text") or command
                 recipient_email = (details.get("to") or [None])[0]
                 try:
@@ -781,9 +1008,77 @@ def on_command(command: str):
                     print("[AGENT] ✨ Email draft polished by model.")
                 except Exception as polish_error:
                     print(f"[AGENT] ⚠ Could not polish email with model: {polish_error}")
-                actions = build_email_actions(details)
-            else:
-                actions = parse_email_actions_from_command(command)
+
+            email_mode = _get_email_mode()
+
+            if _should_suppress_duplicate_email(details):
+                print("[AGENT] 🛑 Duplicate email send suppressed.")
+                usage_after = get_usage_totals()
+                usage_delta = _usage_delta(usage_before, usage_after)
+                write_response(
+                    command=command,
+                    actions=[{"action": "email_send_guard"}],
+                    results=[
+                        {
+                            "step": 1,
+                            "action": "email_send_guard",
+                            "params": {"action": "email_send_guard"},
+                            "success": True,
+                            "note": "Duplicate email detected within safety window; second send suppressed.",
+                        }
+                    ],
+                    llm_usage=usage_delta,
+                    llm_usage_total=usage_after,
+                    llm_last_call=get_last_call_usage(),
+                )
+                _append_memory_entry(
+                    command=command,
+                    status="SUCCESS",
+                    summary="duplicate email suppressed",
+                    usage_delta=usage_delta,
+                )
+                return
+            if email_mode == "api":
+                print("[AGENT] 🔐 Sending email via Gmail API (OAuth)...")
+                if send_gmail_with_api is None:
+                    raise Exception("Gmail API mode requires Google auth libraries. Install with: pip install -r requirements.txt")
+                actions, results, error = send_gmail_with_api(details)
+                usage_after = get_usage_totals()
+                usage_delta = _usage_delta(usage_before, usage_after)
+                write_response(
+                    command=command,
+                    actions=actions,
+                    results=results,
+                    llm_usage=usage_delta,
+                    llm_usage_total=usage_after,
+                    llm_last_call=get_last_call_usage(),
+                )
+                status = "SUCCESS" if not error else "PARTIAL"
+                summary = "gmail api email sent" if not error else f"gmail api error: {error}"
+                _append_memory_entry(command=command, status=status, summary=summary, usage_delta=usage_delta)
+                return
+
+            if email_mode == "playwright":
+                print("[AGENT] 🌐 Sending email via Playwright browser automation...")
+                if send_gmail_with_playwright is None:
+                    raise Exception("Playwright email mode requires Playwright. Install with: pip install -r requirements.txt")
+                actions, results, error = send_gmail_with_playwright(details)
+                usage_after = get_usage_totals()
+                usage_delta = _usage_delta(usage_before, usage_after)
+                write_response(
+                    command=command,
+                    actions=actions,
+                    results=results,
+                    llm_usage=usage_delta,
+                    llm_usage_total=usage_after,
+                    llm_last_call=get_last_call_usage(),
+                )
+                status = "SUCCESS" if not error else "PARTIAL"
+                summary = "playwright email sent" if not error else f"playwright email error: {error}"
+                _append_memory_entry(command=command, status=status, summary=summary, usage_delta=usage_delta)
+                return
+
+            actions = build_email_actions(details)
             valid, note = validate_email_actions(actions)
             if not valid:
                 raise Exception(f"Email action plan invalid: {note}")

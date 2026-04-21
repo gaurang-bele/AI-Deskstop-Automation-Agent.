@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 *.log
 node_modules/
+gmail_credentials.json
+gmail_token.json
