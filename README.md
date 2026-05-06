@@ -155,3 +155,7 @@ python -m unittest discover
 - `email_automation.py` - email command parsing and build logic
 - `browser_agent.py` - Playwright-based browsing loop
 - `llm.py` - model calls, planning, and usage tracking
+
+## License
+
+-Mit license
