@@ -158,4 +158,4 @@ python -m unittest discover
 
 ## License
 
--Mit license
+MIT license
