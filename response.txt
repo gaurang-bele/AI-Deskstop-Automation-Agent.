@@ -2,47 +2,71 @@
        DESKTOP AI AGENT — RESPONSE REPORT
 ==================================================
 
-  Status  :  ✅ SUCCESS
-  Steps   :  4/4 succeeded
-  Time    :  2026-04-17 01:15:52
-  Command :  open calculator and do 32335351*24
-  LLM     :  4750 tokens (4633 prompt + 117 completion) across 1 call(s)
-  Cost    :  Task $0.00076515 (prompt $0.00069495 + completion $0.00007020)
-  Total   :  73903 tokens, $0.01313430 overall
+  Status  : ⚠️ RESEARCH INCOMPLETE
+  Time    : 2026-05-06 11:51:54
+  Command : open edge and fetch information about Mahindra details
+  Query   : Mahindra details
+  Fields  : overview, key facts, common uses
+
+  LLM Task Usage  : 0 tokens (0 prompt + 0 completion), $0.00000000
+  LLM Total Usage : 221764 tokens (208818 prompt + 12946 completion), $0.03909030
 
 --------------------------------------------------
   STEP-BY-STEP BREAKDOWN
 --------------------------------------------------
   [✓] Step 1: open_app
-       └─ Opened calc.exe
-  [✓] Step 2: wait
+       └─ Opened "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+  [✓] Step 2: open_url
+       └─ Opened URL: https://google.com/search?q=Mahindra+details+key+facts+common+uses+overview
+  [✓] Step 3: wait
        └─ Waited 2s
-  [✓] Step 3: type_text
-       └─ Typed: '32335351*24'
-  [✓] Step 4: press_key
-       └─ Pressed: ['enter']
+
+No relevant facts were extracted.
+Reason: Could not extract requested details from fetched sources.
+
+Sources checked: No sources fetched.
 
 ==================================================
   RAW JSON LOG (for developers)
 ==================================================
 {
-  "timestamp": "2026-04-17 01:15:52",
-  "command": "open calculator and do 32335351*24",
-  "overall_status": "✅ SUCCESS",
-  "summary": "4/4 steps completed",
+  "timestamp": "2026-05-06 11:51:54",
+  "command": "open edge and fetch information about Mahindra details",
+  "overall_status": "⚠️ RESEARCH INCOMPLETE",
+  "summary": "0 finding(s) across 0 field(s)",
+  "query": "Mahindra details",
+  "fields": [
+    "overview",
+    "key facts",
+    "common uses"
+  ],
+  "findings": {},
+  "sources": [],
+  "error": "Could not extract requested details from fetched sources.",
   "steps": [
     {
       "step": 1,
       "action": "open_app",
       "params": {
         "action": "open_app",
-        "app": "calculator"
+        "app": "edge"
       },
       "success": true,
-      "note": "Opened calc.exe"
+      "note": "Opened \"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\""
     },
     {
       "step": 2,
+      "action": "open_url",
+      "params": {
+        "action": "open_url",
+        "url": "google.com/search?q=Mahindra+details+key+facts+common+uses+overview",
+        "app": "edge"
+      },
+      "success": true,
+      "note": "Opened URL: https://google.com/search?q=Mahindra+details+key+facts+common+uses+overview"
+    },
+    {
+      "step": 3,
       "action": "wait",
       "params": {
         "action": "wait",
@@ -50,55 +74,24 @@
       },
       "success": true,
       "note": "Waited 2s"
-    },
-    {
-      "step": 3,
-      "action": "type_text",
-      "params": {
-        "action": "type_text",
-        "text": "32335351*24"
-      },
-      "success": true,
-      "note": "Typed: '32335351*24'"
-    },
-    {
-      "step": 4,
-      "action": "press_key",
-      "params": {
-        "action": "press_key",
-        "keys": [
-          "enter"
-        ]
-      },
-      "success": true,
-      "note": "Pressed: ['enter']"
     }
   ],
   "llm_usage": {
-    "requests": 1,
-    "prompt_tokens": 4633,
-    "completion_tokens": 117,
-    "total_tokens": 4750,
-    "prompt_cost_usd": 0.00069495,
-    "completion_cost_usd": 7.02e-05,
-    "total_cost_usd": 0.00076515
+    "requests": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "prompt_cost_usd": 0.0,
+    "completion_cost_usd": 0.0,
+    "total_cost_usd": 0.0
   },
   "llm_usage_total": {
-    "requests": 45,
-    "prompt_tokens": 69350,
-    "completion_tokens": 4553,
-    "total_tokens": 73903,
-    "prompt_cost_usd": 0.0104025,
-    "completion_cost_usd": 0.0027318,
-    "total_cost_usd": 0.0131343
-  },
-  "llm_last_call": {
-    "requests": 1,
-    "prompt_tokens": 4633,
-    "completion_tokens": 117,
-    "total_tokens": 4750,
-    "prompt_cost_usd": 0.00069495,
-    "completion_cost_usd": 7.02e-05,
-    "total_cost_usd": 0.00076515
+    "requests": 154,
+    "prompt_tokens": 208818,
+    "completion_tokens": 12946,
+    "total_tokens": 221764,
+    "prompt_cost_usd": 0.0313227,
+    "completion_cost_usd": 0.0077676,
+    "total_cost_usd": 0.0390903
   }
 }

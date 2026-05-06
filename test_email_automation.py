@@ -50,6 +50,49 @@ class EmailAutomationParserTests(unittest.TestCase):
         self.assertLess(attach_action_index, send_index)
         self.assertLess(attach_index, send_index)
 
+    def test_inbox_search_intent_and_query(self):
+        command = 'search inbox query "from:billing@example.com is:unread" top 5'
+        details = parse_email_request(command)
+        self.assertEqual(details["intent"], "inbox_search")
+        self.assertEqual(details["query"], "from:billing@example.com is:unread")
+        self.assertEqual(details["max_results"], 5)
+
+    def test_reply_intent_extracts_message_id(self):
+        command = 'reply to message id 18c9abXYZ123 saying "Thanks for sharing" send now'
+        details = parse_email_request(command)
+        self.assertEqual(details["intent"], "message_reply")
+        self.assertEqual(details["message_id"], "18c9abXYZ123")
+        self.assertTrue(details["send"])
+
+    def test_label_apply_intent_extracts_target(self):
+        command = 'apply label "Finance" to message id 18c9abXYZ123'
+        details = parse_email_request(command)
+        self.assertEqual(details["intent"], "label_apply")
+        self.assertEqual(details["label_name"], "Finance")
+        self.assertEqual(details["message_id"], "18c9abXYZ123")
+
+    def test_schedule_send_extracts_time_and_disables_immediate_send(self):
+        command = (
+            'schedule email to gaurangbele178@gmail.com subject "Reminder" '
+            'body "Please check the report" in 10 minutes'
+        )
+        details = parse_email_request(command)
+        self.assertEqual(details["intent"], "schedule_send")
+        self.assertTrue(bool(details["schedule_at"]))
+        self.assertFalse(details["send"])
+
+    def test_template_and_signature_management_intents(self):
+        template_details = parse_email_request(
+            'save template follow up subject "Quick Follow-up" body "Checking in on this"'
+        )
+        signature_details = parse_email_request(
+            'save signature work body "Regards, Gaurang"'
+        )
+        self.assertEqual(template_details["intent"], "template_save")
+        self.assertEqual(template_details["template_name"], "follow up")
+        self.assertEqual(signature_details["intent"], "signature_save")
+        self.assertEqual(signature_details["signature_name"], "work")
+
 
 if __name__ == "__main__":
     unittest.main()

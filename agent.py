@@ -998,7 +998,15 @@ def on_command(command: str):
         elif email_request:
             print("[AGENT] 📧 Email command detected - building Gmail action plan...")
             details = parse_email_request(command)
-            if wants_model_polish(command):
+            email_intent = str(details.get("intent", "compose_send") or "compose_send")
+            can_polish = email_intent in {
+                "compose_send",
+                "schedule_send",
+                "message_reply",
+                "message_reply_all",
+                "message_forward",
+            }
+            if can_polish and wants_model_polish(command):
                 raw_intent = details.get("body") or details.get("raw_text") or command
                 recipient_email = (details.get("to") or [None])[0]
                 try:
@@ -1054,7 +1062,7 @@ def on_command(command: str):
                     llm_last_call=get_last_call_usage(),
                 )
                 status = "SUCCESS" if not error else "PARTIAL"
-                summary = "gmail api email sent" if not error else f"gmail api error: {error}"
+                summary = f"gmail api {email_intent} ok" if not error else f"gmail api {email_intent} error: {error}"
                 _append_memory_entry(command=command, status=status, summary=summary, usage_delta=usage_delta)
                 return
 

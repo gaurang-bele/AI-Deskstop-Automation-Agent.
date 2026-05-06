@@ -26,3 +26,105 @@
 2026-04-17 01:14:00 | SUCCESS | command=open C:\Users\DELL\Downloads\Orders_Table (2).csv and sum of range A2:A100 | summary=completed_steps=2/2 | tokens=0 | cost_usd=0.00000000
 2026-04-17 01:14:37 | SUCCESS | command=open C:\Users\DELL\Downloads\Orders_Table (2).csv and sum of range A2:A100open C:\Users\DELL\Downloads\Orders_Table (2).csv and filter column A greater than 1000 | summary=completed_steps=2/2 | tokens=0 | cost_usd=0.00000000
 2026-04-17 01:15:52 | SUCCESS | command=open calculator and do 32335351*24 | summary=completed_steps=4/4 | tokens=4750 | cost_usd=0.00076515
+2026-04-17 08:58:47 | SUCCESS | command=open calculator and do 32335351*24 | summary=completed_steps=3/3 | tokens=4719 | cost_usd=0.00075105
+2026-04-17 09:00:36 | SUCCESS | command=open google and fetch information about electric fuse its use, cost , brands | summary=research findings fields=3 steps=8/8 | tokens=2430 | cost_usd=0.00050085
+2026-04-17 11:08:42 | SUCCESS | command=open google and fetch DETAILS about 0603YG105ZAT2A | summary=completed_steps=5/5 | tokens=4699 | cost_usd=0.00074670
+2026-04-17 11:13:25 | PARTIAL | command=open google and fetch INFORMATION about 0603YG105ZAT2A | summary=research findings fields=0 steps=8/8 | tokens=1212 | cost_usd=0.00019395
+2026-04-17 11:23:40 | SUCCESS | command=open google and fetch information about bmw, its diffrent models and there price, top speeds, diffrent color options | summary=research findings fields=1 steps=8/8 | tokens=1291 | cost_usd=0.00022785
+2026-04-17 11:25:28 | PARTIAL | command=open google and fetch information about 0603YG105ZAT2A | summary=research findings fields=0 steps=8/8 | tokens=1212 | cost_usd=0.00019395
+2026-04-17 11:27:45 | PARTIAL | command=open google and fetch information about 0603YG105ZAT2A | summary=research findings fields=0 steps=8/8 | tokens=1212 | cost_usd=0.00019395
+2026-04-17 11:28:11 | SUCCESS | command=open google and fetch information about mercedse | summary=research findings fields=3 steps=8/8 | tokens=2326 | cost_usd=0.00050100
+2026-04-17 14:22:15 | SUCCESS | command=open google and mail pankaj.chandankhede@raisoni.net subject "missing documents for application" body " you have missing documents like aadhar card, pan card etc" send it polish it | summary=completed_steps=11/11 | tokens=4098 | cost_usd=0.00065970
+2026-04-17 14:25:19 | SUCCESS | command=open google and mail gaurangbele123@gmail.com subject "missing documents for application" body " you have missing documents like aadhar card, pan card etc" send it polish it | summary=completed_steps=11/11 | tokens=4080 | cost_usd=0.00064935
+2026-04-17 14:27:43 | SUCCESS | command=open google and fetch information about bmw, its diffrent models and there pric | summary=research findings fields=2 steps=8/8 | tokens=2353 | cost_usd=0.00048435
+2026-04-17 14:32:36 | PARTIAL | command=open google and fetch information about 0603YG105ZAT2A | summary=research findings fields=0 steps=8/8 | tokens=1212 | cost_usd=0.00019395
+2026-04-17 14:35:01 | PARTIAL | command=open google and fetch information about 0603YG105ZAT2A | summary=research findings fields=0 steps=8/8 | tokens=1212 | cost_usd=0.00019395
+2026-04-17 16:33:06 | PARTIAL | command=open C:\Users\DELL\Downloads\Orders_Table (2).csv and sort by column transaction_id descending | summary=completed_steps=0/2 | tokens=0 | cost_usd=0.00000000
+2026-04-21 00:44:52 | SUCCESS | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" | summary=completed_steps=11/11 | tokens=3844 | cost_usd=0.00057750
+2026-04-21 00:46:02 | SUCCESS | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it | summary=completed_steps=11/11 | tokens=4166 | cost_usd=0.00067035
+2026-04-21 00:46:25 | SUCCESS | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=11/11 | tokens=4173 | cost_usd=0.00067365
+2026-04-21 02:03:04 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=2193 | cost_usd=0.00036135
+2026-04-21 02:04:31 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=2201 | cost_usd=0.00036615
+2026-04-21 02:08:30 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=2199 | cost_usd=0.00036495
+2026-04-21 02:14:13 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=2201 | cost_usd=0.00036615
+2026-04-21 02:17:47 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=2201 | cost_usd=0.00036615
+2026-04-21 02:23:09 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=654 | cost_usd=0.00013410
+2026-04-21 02:28:54 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=2184 | cost_usd=0.00035595
+2026-04-21 02:30:23 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=7/13 | tokens=4174 | cost_usd=0.00067290
+2026-04-21 02:34:07 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=5/11 | tokens=2201 | cost_usd=0.00036615
+2026-04-21 02:38:32 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=5/11 | tokens=4176 | cost_usd=0.00067410
+2026-04-21 02:43:38 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=completed_steps=5/11 | tokens=4179 | cost_usd=0.00067590
+2026-04-21 13:24:42 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=playwright email error: BrowserType.launch_persistent_context: Target page, context or browser has been closed
+Browser logs:
+
+<launching> C:\Program Files\Google\Chrome\Application\chrome.exe --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --profile-directory=Profile 3 --no-first-run --no-default-browser-check --user-data-dir=C:\Users\DELL\AppData\Local\Google\Chrome\User Data --remote-debugging-pipe about:blank
+<launched> pid=2400
+[pid=2400][err] 
+[pid=2400][err] DevTools remote debugging requires a non-default data directory. Specify this using --user-data-dir.
+[pid=2400][err] [2400:16420:0421/132236.897:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[pid=2400][err] [2400:16420:0421/132300.255:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[pid=2400][err] [2400:16420:0421/132342.107:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+Call log:
+  - <launching> C:\Program Files\Google\Chrome\Application\chrome.exe --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --profile-directory=Profile 3 --no-first-run --no-default-browser-check --user-data-dir=C:\Users\DELL\AppData\Local\Google\Chrome\User Data --remote-debugging-pipe about:blank
+  - <launched> pid=2400
+  - [pid=2400][err]
+  - [pid=2400][err] DevTools remote debugging requires a non-default data directory. Specify this using --user-data-dir.
+  - [pid=2400][err] [2400:16420:0421/132236.897:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+  - [pid=2400][err] [2400:16420:0421/132300.255:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+  - [pid=2400][err] [2400:16420:0421/132342.107:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+  - [pid=2400] <gracefully close start>
+  - [pid=2400] <kill>
+  - [pid=2400] <will force kill>
+  - [pid=2400] taskkill stderr: ERROR: The process "2400" not found.
+  - [pid=2400] <process did exit: exitCode=0, signal=null>
+  - [pid=2400] starting temporary directories cleanup
+  - [pid=2400] finished temporary directories cleanup
+  - [pid=2400] <gracefully close end>
+ | tokens=274 | cost_usd=0.00007575
+2026-04-21 13:39:28 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=playwright email error: Gmail compose not ready (category=SESSION_EXPIRED). Make sure Gmail is logged in. | tokens=276 | cost_usd=0.00007695
+2026-04-21 13:42:17 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=playwright email error: Gmail compose not ready (category=UNKNOWN). Make sure Gmail is logged in. | tokens=276 | cost_usd=0.00007695
+2026-04-21 13:42:46 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=playwright email error: Gmail compose not ready (category=UNKNOWN). Make sure Gmail is logged in. | tokens=276 | cost_usd=0.00007695
+2026-04-21 13:46:23 | PARTIAL | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=playwright email error: Gmail compose not ready (category=UNKNOWN). Make sure Gmail is logged in. | tokens=276 | cost_usd=0.00007695
+2026-04-21 21:22:59 | SUCCESS | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=gmail api email sent | tokens=276 | cost_usd=0.00007695
+2026-04-21 21:23:15 | SUCCESS | command="Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it. | summary=gmail api email sent | tokens=274 | cost_usd=0.00007575
+2026-04-21 23:40:27 | SUCCESS | command="Search for latest AI benchmarks and send me a summary" | summary=research findings fields=3 steps=0/0 | tokens=465 | cost_usd=0.00012510
+2026-04-21 23:42:21 | SUCCESS | command=open youtube and search for lady gaga songs and play the first one | summary=research findings fields=3 steps=0/0 | tokens=3158 | cost_usd=0.00065820
+2026-04-21 23:43:36 | SUCCESS | command=open youtube and search for lady gaga songs and | summary=research findings fields=3 steps=0/0 | tokens=2773 | cost_usd=0.00057390
+2026-04-21 23:43:51 | SUCCESS | command=open youtube and search for lady gaga songs | summary=research findings fields=1 steps=0/0 | tokens=4467 | cost_usd=0.00093555
+2026-04-21 23:44:11 | SUCCESS | command=open youtube play lady gaga songs | summary=completed_steps=11/11 | tokens=4736 | cost_usd=0.00084900
+2026-04-21 23:56:21 | PARTIAL | command=open amazon add to cart a tooth brush | summary=completed_steps=11/12 | tokens=3077 | cost_usd=0.00054120
+2026-04-21 23:58:10 | PARTIAL | command=open amazon look for a tooth brush and add to cart | summary=completed_steps=11/13 | tokens=3251 | cost_usd=0.00064020
+2026-04-22 00:03:27 | PARTIAL | command=open google and fetch information about 0603YG105ZAT2A, its Voltage, Temperature Coefficient, Operating Temperature | summary=research findings fields=0 steps=8/8 | tokens=1223 | cost_usd=0.00019695
+2026-04-22 00:36:40 | PARTIAL | command=open google and fetch information about 0603YG105ZAT2A, its Voltage, Temperature Coefficient, Operating Temperature | summary=research findings fields=0 steps=11/11 | tokens=0 | cost_usd=0.00000000
+2026-04-22 00:37:35 | SUCCESS | command=open google and fetch information about 0603YG105ZAT2A, its Voltage, Temperature Coefficient, Operating Temperature | summary=research findings fields=4 steps=11/11 | tokens=413 | cost_usd=0.00016365
+2026-04-22 00:38:36 | PARTIAL | command=open google and fetch information about 0603YG105ZAT2A. | summary=research findings fields=0 steps=11/11 | tokens=0 | cost_usd=0.00000000
+2026-04-22 00:45:52 | SUCCESS | command=open google and fetch information about 0603YG105ZAT2A. | summary=research findings fields=7 steps=3/3 | tokens=12365 | cost_usd=0.00228990
+2026-04-22 10:31:10 | SUCCESS | command=open google and fetch information about ECJ1VF1C105Z. | summary=research findings fields=2 steps=3/3 | tokens=16174 | cost_usd=0.00251205
+2026-04-22 10:39:49 | SUCCESS | command=open google and fetch information about ECJ1VF1C105Z. voltage | summary=research findings fields=2 steps=3/3 | tokens=9767 | cost_usd=0.00166755
+2026-04-22 10:40:08 | SUCCESS | command=open google and fetch information about ECJ1VF1C105Z. voltage, | summary=research findings fields=2 steps=3/3 | tokens=2078 | cost_usd=0.00046695
+2026-04-22 11:15:47 | SUCCESS | command=open google and fetch information about 0603YG105ZAT2A
+0603YG105ZAT4A, ECJ1VF1C105Z. voltage, tolerance | summary=research findings fields=2 steps=3/3 | tokens=3150 | cost_usd=0.00057870
+2026-05-06 11:45:54 | PARTIAL | command=open google and fetch information about Mahindra Stock | summary=research findings fields=0 steps=3/3 | tokens=0 | cost_usd=0.00000000
+2026-05-06 11:46:26 | PARTIAL | command=open edge and fetch information about Mahindra Stock | summary=research findings fields=0 steps=3/3 | tokens=0 | cost_usd=0.00000000
+2026-05-06 11:51:54 | PARTIAL | command=open edge and fetch information about Mahindra details | summary=research findings fields=0 steps=3/3 | tokens=0 | cost_usd=0.00000000
