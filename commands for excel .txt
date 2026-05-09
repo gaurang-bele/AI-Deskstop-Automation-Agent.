@@ -17,4 +17,22 @@ open C:\Users\DELL\Downloads\Orders_Table (2).csv and delete rows 2 to 10
 open C:\Users\DELL\Downloads\Orders_Table (2).csv and save the workbook as C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx
 
 
- open google and mail gaurangbele178@gmail.com subject "missing documents for application" body " you have missing documents like aadhar card, pan card etc" send it polish it
+ open google and compose a mail to gaurangbele178@gmail.com also add gaurangbele123@gmail.com to cc and gaurangbele007@gmail.com to bcc. subject "missing documents for application" body " you have missing documents like aadhar card, pan card etc" send it polish it
+
+
+
+ open google and fetch information about bmw, its diffrent models and there price, top speeds, diffrent color options
+
+"Open the Q1 sales file, sum all revenue in column D, 
+         and highlight cells with values > $100k"
+
+"Search for latest AI benchmarks and send me a summary"
+
+"Send gaurang at gaurangbele178@gmail.com an email saying we're ready 
+          with the Q1 report and attach the file from C:\Users\DELL\Downloads\Orders_Table_cleaned.xlsx" polish it.
+
+          0603YG105ZAT2A
+0603YG105ZAT4A
+ECJ1VF1C105Z
+
+open google and fetch information about 0603YG105ZAT2A.

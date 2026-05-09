@@ -8,3 +8,7 @@ screen.png
 response.txt
 part_code_results.txt
 *.log
+.playwright-profile/
+agent_memory.jsonl
+llm_usage_totals.json
+screen_locate.png
