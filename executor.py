@@ -29,7 +29,6 @@ import pytesseract
 from PIL import ImageGrab
 import pygetwindow as gw
 from excel_automation import EXCEL_ACTIONS, execute_excel_action, run_excel_smoke_checks
-from llm import locate_ui_target
 
 try:
     import tkinter as tk
@@ -59,7 +58,8 @@ def log_action(action_type: str, details: str, status: str = "INFO"):
     """Enhanced logging with timestamps and categories"""
     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     level = getattr(logging, status.upper(), logging.INFO)
-    msg = f"[{action_type}] {details}"
+    context_prefix = f"[cmd:{_active_command_id}] " if _active_command_id else ""
+    msg = f"[{action_type}] {context_prefix}{details}"
     logging.log(level, msg)
     print(f"[{timestamp}] {msg}")
 
@@ -126,6 +126,12 @@ def get_clipboard_text() -> str:
 
 _last_opened_app = None
 _last_opened_category = None
+_active_command_id = ""
+
+
+def set_log_context(command_id: str | None = None) -> None:
+    global _active_command_id
+    _active_command_id = str(command_id or "").strip()
 
 
 # ── TESSERACT PATH ────────────────────────────────────────────
@@ -222,8 +228,8 @@ APP_MAP = {
     # Browsers
     "chrome":        'start chrome --profile-directory="Profile 3"',
     "google":        'start chrome --profile-directory="Profile 3"',
-    "edge":          "start microsoft-edge:",
-    "msedge":        "start microsoft-edge:",
+    "edge":          "start msedge",
+    "msedge":        "start msedge",
     "firefox":       "start firefox",
     "brave":         "start brave",
 
@@ -264,50 +270,26 @@ WINDOW_TITLES = {
     "zoom":       "Zoom",
 }
 
+BROWSER_TITLE_HINTS = {
+    "chrome": ["chrome"],
+    "google": ["chrome"],
+    "edge": ["edge", "microsoft edge", "msedge"],
+    "msedge": ["edge", "microsoft edge", "msedge"],
+    "firefox": ["firefox"],
+    "brave": ["brave"],
+}
+
+BROWSER_FOREIGN_HINTS = {
+    "chrome": ["edge", "microsoft edge", "msedge", "firefox", "brave"],
+    "google": ["edge", "microsoft edge", "msedge", "firefox", "brave"],
+    "edge": ["chrome", "firefox", "brave"],
+    "msedge": ["chrome", "firefox", "brave"],
+    "firefox": ["chrome", "edge", "microsoft edge", "msedge", "brave"],
+    "brave": ["chrome", "edge", "microsoft edge", "msedge", "firefox"],
+}
+
 # Create screenshots folder
 os.makedirs("screenshots", exist_ok=True)
-
-
-def _resolve_edge_command() -> str:
-    candidates = []
-    pf_x86 = os.environ.get("PROGRAMFILES(X86)")
-    pf = os.environ.get("PROGRAMFILES")
-    if pf_x86:
-        candidates.append(os.path.join(pf_x86, "Microsoft", "Edge", "Application", "msedge.exe"))
-    if pf:
-        candidates.append(os.path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe"))
-    for path in candidates:
-        if os.path.exists(path):
-            return f'"{path}"'
-    return APP_MAP.get("edge", "start microsoft-edge:")
-
-
-def _open_url_in_browser(url: str, browser: str) -> bool:
-    browser_name = (browser or "").lower().strip()
-    if not browser_name:
-        return False
-
-    try:
-        if browser_name in {"chrome", "google"}:
-            cmd = f'start chrome --profile-directory="Profile 3" "{url}"'
-        elif browser_name in {"edge", "msedge"}:
-            edge_cmd = _resolve_edge_command()
-            if edge_cmd.startswith('"'):
-                cmd = f'{edge_cmd} "{url}"'
-            else:
-                cmd = f'start microsoft-edge:{url}'
-        elif browser_name == "firefox":
-            cmd = f'start firefox "{url}"'
-        elif browser_name == "brave":
-            cmd = f'start brave "{url}"'
-        else:
-            return False
-
-        subprocess.Popen(cmd, shell=True)
-        return True
-    except Exception as exc:
-        log_action("OPEN_URL", f"Browser-specific URL launch failed for {browser_name}: {exc}", "WARNING")
-        return False
 
 
 # ── CATEGORY-SPECIFIC FOCUS FUNCTIONS ────────────────────────
@@ -319,19 +301,27 @@ def focus_browser(app_name: str, settings: dict) -> bool:
     all_windows = gw.getAllWindows()
     matching = []
 
+    app_lower = app_name.lower()
+    include_hints = BROWSER_TITLE_HINTS.get(app_lower, [app_lower])
+    foreign_hints = BROWSER_FOREIGN_HINTS.get(app_lower, [])
+
     for win in all_windows:
         if not win.title:
             continue
         title_lower = win.title.lower()
-        # Browsers often have page title + browser name
-        for keyword in settings["window_keywords"]:
-            if keyword in title_lower:
-                matching.append(win)
-                break
+
+        # Lock browser focus to requested app (e.g. Chrome should not match Edge).
+        if any(h in title_lower for h in include_hints) and not any(h in title_lower for h in foreign_hints):
+            matching.append(win)
 
     if matching:
-        # For browsers, prefer windows with shorter titles (main window vs tabs)
-        matching.sort(key=lambda w: len(w.title) if w.title else 999)
+        # Prefer tabs with domain/app title over generic "New Tab".
+        matching.sort(
+            key=lambda w: (
+                1 if "new tab" in (w.title or "").lower() else 0,
+                len(w.title or "")
+            )
+        )
         return _activate_window(matching[0], settings)
 
     log_action("FOCUS", f"No browser window found for {app_name}", "WARNING")
@@ -419,6 +409,27 @@ def _activate_window(win, settings: dict) -> bool:
         return False
 
 
+def _get_active_window_title() -> str:
+    try:
+        active = gw.getActiveWindow()
+        if active and active.title:
+            return str(active.title)
+    except Exception as e:
+        log_action("FOCUS", f"Could not read active window title: {e}", "WARNING")
+    return ""
+
+
+def _active_window_matches_browser(app_name: str) -> bool:
+    app_lower = app_name.lower()
+    title = _get_active_window_title().lower()
+    if not title:
+        return False
+
+    include_hints = BROWSER_TITLE_HINTS.get(app_lower, [app_lower])
+    foreign_hints = BROWSER_FOREIGN_HINTS.get(app_lower, [])
+    return any(h in title for h in include_hints) and not any(h in title for h in foreign_hints)
+
+
 def focus_app_by_category(app_name: str) -> bool:
     """Main focus function - routes to category-specific handler"""
     global _last_opened_category
@@ -467,6 +478,15 @@ def _focus_last_opened_app(action_label: str, strict: bool = False) -> tuple[boo
         focused = focus_app_by_category(_last_opened_app)
 
     if focused:
+        if _last_opened_app and _last_opened_app.lower() in APP_CATEGORIES["browser"]["apps"]:
+            if not _active_window_matches_browser(_last_opened_app):
+                title = _get_active_window_title() or "<unknown>"
+                message = f"Active window mismatch for {_last_opened_app}: '{title}'"
+                if strict:
+                    log_action(action_label, message, "ERROR")
+                    return False, message
+                log_action(action_label, message, "WARNING")
+
         time.sleep(settings["action_delay"])
         return True, ""
 
@@ -504,217 +524,6 @@ def find_text_on_screen(text: str):
 
     log_action("OCR", f"Text '{text}' not found on screen", "WARNING")
     return None
-
-
-def _is_file_dialog_open() -> bool:
-    # Language-independent check: native Windows file pickers are commonly #32770 dialogs.
-    if HAS_WIN32:
-        found_dialog = {"value": False}
-
-        def _enum_handler(hwnd, _):
-            if not win32gui.IsWindowVisible(hwnd):
-                return True
-            class_name = win32gui.GetClassName(hwnd)
-            if class_name == "#32770":
-                found_dialog["value"] = True
-                return False
-            return True
-
-        try:
-            win32gui.EnumWindows(_enum_handler, None)
-            if found_dialog["value"]:
-                return True
-        except Exception:
-            pass
-
-    try:
-        titles = [title.strip().lower() for title in gw.getAllTitles() if title and title.strip()]
-    except Exception:
-        return False
-
-    dialog_markers = (
-        "open",
-        "choose file",
-        "file upload",
-        "upload file",
-    )
-    return any(any(marker in title for marker in dialog_markers) for title in titles)
-
-
-def _focus_gmail_compose_window() -> bool:
-    try:
-        windows = gw.getAllWindows()
-    except Exception:
-        return False
-
-    compose_markers = ("compose mail", "gmail")
-    candidates = [
-        win for win in windows
-        if getattr(win, "title", None)
-        and any(marker in win.title.lower() for marker in compose_markers)
-    ]
-    if not candidates:
-        return False
-
-    # Prefer explicit compose windows first.
-    candidates.sort(key=lambda w: 0 if "compose" in w.title.lower() else 1)
-    return _activate_window(candidates[0], APP_CATEGORIES["browser"])
-
-
-def _get_active_browser_window():
-    try:
-        windows = gw.getAllWindows()
-    except Exception:
-        return None
-
-    browser_markers = ("google chrome", "gmail")
-    active = []
-    for win in windows:
-        title = getattr(win, "title", "")
-        if not title:
-            continue
-        lower = title.lower()
-        if any(marker in lower for marker in browser_markers):
-            active.append(win)
-
-    if not active:
-        return None
-
-    # Prefer compose tab/window if available, otherwise take current browser.
-    active.sort(key=lambda w: 0 if "compose" in w.title.lower() else 1)
-    return active[0]
-
-
-def _window_bounds(win) -> tuple[int, int, int, int] | None:
-    try:
-        left = int(win.left)
-        top = int(win.top)
-        width = int(win.width)
-        height = int(win.height)
-        return left, top, width, height
-    except Exception:
-        return None
-
-
-def _find_text_on_screen_in_region(text: str, region: tuple[int, int, int, int], min_conf: int = 60):
-    left, top, width, height = region
-    right = left + width
-    bottom = top + height
-    log_action("OCR", f"Searching '{text}' in region ({left},{top})-({right},{bottom})")
-
-    img = ImageGrab.grab()
-    data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-
-    for i, word in enumerate(data["text"]):
-        if not word.strip():
-            continue
-        if text.lower() not in word.lower():
-            continue
-        conf = int(data["conf"][i])
-        if conf < min_conf:
-            continue
-        x = data["left"][i] + data["width"][i] // 2
-        y = data["top"][i] + data["height"][i] // 2
-        if left <= x <= right and top <= y <= bottom:
-            log_action("OCR", f"Found '{word}' at ({x}, {y}) in region — confidence: {conf}%")
-            return (x, y)
-
-    log_action("OCR", f"Text '{text}' not found in region", "WARNING")
-    return None
-
-
-def _open_attach_dialog_by_layout_guess() -> bool:
-    win = _get_active_browser_window()
-    if not win:
-        log_action("ATTACH", "Layout fallback skipped: no active browser window", "WARNING")
-        return False
-
-    bounds = _window_bounds(win)
-    if not bounds:
-        log_action("ATTACH", "Layout fallback skipped: could not read browser window bounds", "WARNING")
-        return False
-    left, top, width, height = bounds
-
-    log_action(
-        "ATTACH",
-        f"Layout fallback on window '{_safe_console_text(getattr(win, 'title', ''))}' "
-        f"at ({left},{top}) size {width}x{height}",
-    )
-
-    # Constrain to compose-toolbar area (avoid random clicks in page/header).
-    x_ratios = (0.62, 0.66, 0.70, 0.74, 0.78, 0.82)
-    y_ratios = (0.78, 0.82, 0.86, 0.90)
-    candidates = [(left + int(width * xr), top + int(height * yr)) for yr in y_ratios for xr in x_ratios]
-
-    for x, y in candidates:
-        log_action("ATTACH", f"Layout fallback click at ({x}, {y})", "DEBUG")
-        pyautogui.click(x, y)
-        time.sleep(1.2)
-        if _is_file_dialog_open():
-            log_action("ATTACH", "File dialog detected after layout fallback click")
-            return True
-    log_action("ATTACH", "Layout fallback clicks did not open a file dialog", "WARNING")
-    return False
-
-
-def _open_gmail_attach_dialog() -> bool:
-    win = _get_active_browser_window()
-    bounds = _window_bounds(win) if win else None
-    search_region = None
-    if bounds:
-        left, top, width, height = bounds
-        search_region = (
-            left + int(width * 0.52),
-            top + int(height * 0.50),
-            int(width * 0.46),
-            int(height * 0.48),
-        )
-
-    # 1) Try clicking explicit attach labels (depends on UI language/accessibility text).
-    for label in ("Attach files", "Attach"):
-        coords = _find_text_on_screen_in_region(label, search_region) if search_region else find_text_on_screen(label)
-        if coords:
-            pyautogui.click(coords[0], coords[1])
-            time.sleep(1.0)
-            if _is_file_dialog_open():
-                return True
-
-    # 2) If labels are not OCR-visible, click near Send button where paperclip usually lives.
-    for send_label in ("Send",):
-        send_coords = _find_text_on_screen_in_region(send_label, search_region) if search_region else find_text_on_screen(send_label)
-        if send_coords:
-            attach_guess = (send_coords[0] + 110, send_coords[1])
-            pyautogui.click(attach_guess[0], attach_guess[1])
-            time.sleep(1.0)
-            if _is_file_dialog_open():
-                return True
-
-    # 3) Last resort: click likely compose-toolbar paperclip positions.
-    if _open_attach_dialog_by_layout_guess():
-        return True
-
-    # 4) Vision fallback: ask LLM to locate paperclip/attach button.
-    try:
-        llm_point = locate_ui_target("Gmail compose toolbar paperclip attach-files button")
-    except Exception as exc:
-        log_action("ATTACH", f"LLM locate failed: {exc}", "WARNING")
-        llm_point = None
-
-    if llm_point:
-        if search_region:
-            rx, ry, rw, rh = search_region
-            if not (rx <= llm_point[0] <= rx + rw and ry <= llm_point[1] <= ry + rh):
-                log_action("ATTACH", f"LLM point {llm_point} outside compose region; skipping click", "WARNING")
-                llm_point = None
-        if llm_point:
-            log_action("ATTACH", f"LLM fallback click at {llm_point}")
-            pyautogui.click(llm_point[0], llm_point[1])
-            time.sleep(1.2)
-            if _is_file_dialog_open():
-                log_action("ATTACH", "File dialog detected after LLM fallback click")
-                return True
-
-    return False
 
 
 def _run_excel_unit_suite() -> tuple[str, str]:
@@ -887,15 +696,21 @@ def execute_action(action: dict) -> tuple[bool, str]:
         # ── OPEN APP ──────────────────────────────────────────
         if act == "open_app":
             app_name = action.get("app", "").lower()
-            if app_name in {"edge", "msedge"}:
-                exe = _resolve_edge_command()
-            else:
-                exe = APP_MAP.get(app_name, app_name)
+            exe = APP_MAP.get(app_name, app_name)
             category, settings = get_app_category(app_name)
+            target_url = str(action.get("url", "")).strip()
+
+            if target_url and not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target_url):
+                target_url = f"https://{target_url}"
 
             log_action("OPEN_APP", f"Opening '{app_name}' (category: {category})")
 
-            subprocess.Popen(exe, shell=True)
+            launch_cmd = exe
+            if target_url and category == "browser":
+                launch_cmd = f'{exe} "{target_url}"'
+                log_action("OPEN_APP", f"Launching browser with URL: {target_url}")
+
+            subprocess.Popen(launch_cmd, shell=True)
 
             # Wait based on category
             log_action("OPEN_APP", f"Waiting {settings['load_time']}s for {category} app to load")
@@ -911,6 +726,8 @@ def execute_action(action: dict) -> tuple[bool, str]:
             if not focused:
                 log_action("OPEN_APP", f"App opened but window not focused", "WARNING")
 
+            if target_url and category == "browser":
+                return True, f"Opened {app_name} with URL: {target_url}"
             return True, f"Opened {exe}"
 
         # ── OPEN FILE ─────────────────────────────────────────
@@ -990,54 +807,12 @@ def execute_action(action: dict) -> tuple[bool, str]:
             else:
                 return False, f"Text '{text_to_find}' not found on screen"
 
-        # ── ATTACH FILE (Gmail compose) ──────────────────────────
-        elif act == "attach_file":
-            path = action.get("path", "").replace("\\\\", "\\").strip().strip('"')
-            compose_url = action.get("compose_url", "").strip()
-            browser_hint = action.get("browser", "").strip().lower()
-            if not path:
-                return False, "Missing attachment path"
-            if not os.path.exists(path):
-                return False, f"Attachment file not found: '{path}'"
-
-            log_action("ATTACH", f"Attaching file: {path}")
-
-            focused, note = _focus_last_opened_app("ATTACH", strict=False)
-            if not focused:
-                log_action("ATTACH", note, "WARNING")
-
-            # Always reopen compose URL in the intended browser before attach to avoid cross-browser drift.
-            if compose_url:
-                launched = _open_url_in_browser(compose_url, browser_hint or _last_opened_app or "chrome")
-                if not launched:
-                    os.startfile(compose_url)
-                time.sleep(4.0)
-
-            # Ensure we are on Gmail compose, not a generic tab.
-            compose_focused = _focus_gmail_compose_window()
-
-            if not compose_focused:
-                return False, "Could not focus Gmail compose window."
-
-            time.sleep(0.5)
-
-            _open_gmail_attach_dialog()
-
-            if not _is_file_dialog_open():
-                return False, "Could not open attachment dialog."
-
-            _paste_text(path)
-            time.sleep(0.2)
-            pyautogui.press("enter")
-            time.sleep(2.0)
-            return True, f"Attached file: {path}"
-
         # ── TYPE TEXT ─────────────────────────────────────────
         elif act == "type_text":
             text = action["text"]
             log_action("TYPE", f"Typing: '{text[:50]}...' (len={len(text)})")
 
-            focused, note = _focus_last_opened_app("TYPE")
+            focused, note = _focus_last_opened_app("TYPE", strict=True)
             if not focused:
                 return False, note
 
@@ -1049,7 +824,7 @@ def execute_action(action: dict) -> tuple[bool, str]:
             text = action["text"]
             log_action("PASTE", f"Pasting: '{text[:50]}...' (len={len(text)})")
 
-            focused, note = _focus_last_opened_app("PASTE")
+            focused, note = _focus_last_opened_app("PASTE", strict=True)
             if not focused:
                 return False, note
 
@@ -1059,7 +834,6 @@ def execute_action(action: dict) -> tuple[bool, str]:
         # ── OPEN URL ─────────────────────────────────────────
         elif act == "open_url":
             url = action.get("url", "").strip()
-            target_browser = action.get("app", "").strip().lower()
             if not url:
                 return False, "Missing URL"
 
@@ -1067,12 +841,9 @@ def execute_action(action: dict) -> tuple[bool, str]:
                 url = f"https://{url}"
 
             log_action("OPEN_URL", f"Opening URL: {url}")
-            launched = _open_url_in_browser(url, target_browser or _last_opened_app or "")
-            if not launched:
-                os.startfile(url)
-                target_browser = target_browser or _last_opened_app or "chrome"
+            os.startfile(url)
             time.sleep(2.5)
-            _last_opened_app = target_browser or "chrome"
+            _last_opened_app = "chrome"
             _last_opened_category = "browser"
             return True, f"Opened URL: {url}"
 
@@ -1102,14 +873,25 @@ def execute_action(action: dict) -> tuple[bool, str]:
             keys = action.get("keys", [])
             log_action("KEY", f"Pressing: {keys}")
 
-            focused, note = _focus_last_opened_app("KEY")
+            focused, note = _focus_last_opened_app("KEY", strict=True)
             if not focused:
                 return False, note
 
-            if isinstance(keys, list) and len(keys) > 0:
-                pyautogui.hotkey(*keys)
+            if isinstance(keys, list):
+                normalized = [str(k).strip().lower() for k in keys if str(k).strip()]
+                if len(normalized) == 1:
+                    single = "enter" if normalized[0] == "return" else normalized[0]
+                    pyautogui.press(single)
+                elif len(normalized) > 1:
+                    pyautogui.hotkey(*normalized)
+                else:
+                    return False, "No key specified"
             else:
-                pyautogui.press(keys)
+                single = str(keys).strip().lower()
+                if not single:
+                    return False, "No key specified"
+                single = "enter" if single == "return" else single
+                pyautogui.press(single)
             return True, f"Pressed: {keys}"
 
         # ── SCROLL ────────────────────────────────────────────

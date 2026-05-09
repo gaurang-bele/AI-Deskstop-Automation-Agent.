@@ -12,7 +12,6 @@
 #   pytesseract    → OCR: reads text on screen so we can click by text, not coordinates
 #   pygetwindow    → finds and controls windows by title
 #   pywin32        → Windows API for reliable window focusing
-#   playwright     → browser automation for reliable DOM-level actions
 
 pyautogui
 watchdog
@@ -22,9 +21,3 @@ python-dotenv
 pytesseract
 pygetwindow
 pywin32
-playwright
-google-api-python-client
-google-auth
-google-auth-httplib2
-google-auth-oauthlib
-pypdf

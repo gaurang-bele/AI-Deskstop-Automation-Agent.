@@ -17,6 +17,7 @@
 # ── IMPORTS ──────────────────────────────────────────────────
 
 import time
+import os
 # time → we use time.sleep() to add small delays so the file
 # is fully written before we try to read it
 
@@ -44,27 +45,10 @@ class CommandWatcher(FileSystemEventHandler):
         #            when a new command is detected
         self.callback = callback
 
-        # last_content → we store the last command we processed.
+        # last_signature -> (file mtime, content) of last processed save.
         # WHY: watchdog can fire multiple times for one save.
-        # By comparing content, we only act when it ACTUALLY changed.
-        self.last_content = ""
-
-        # Additional debounce state: some editors/cloud-sync layers
-        # write files in multiple passes, briefly producing partial content.
-        self._last_trigger_ts = 0.0
-        self._min_interval_seconds = 0.75
-
-    def _read_stable_content(self) -> str:
-        """Read commands.txt until its content is stable across two reads."""
-        previous = None
-        for _ in range(4):
-            with open("commands.txt", "r", encoding="utf-8") as f:
-                content = f.read().strip()
-            if content and previous is not None and content == previous:
-                return content
-            previous = content
-            time.sleep(0.15)
-        return previous or ""
+        # We want exactly one trigger per save, even if command text is unchanged.
+        self.last_signature = None
 
     def on_modified(self, event):
         # on_modified() is called by watchdog automatically
@@ -82,20 +66,18 @@ class CommandWatcher(FileSystemEventHandler):
             # has finished writing the file. 0.2s gives it time.
             time.sleep(0.2)
 
-            now = time.monotonic()
-            if (now - self._last_trigger_ts) < self._min_interval_seconds:
-                return
-
-            content = self._read_stable_content()
+            # Open and read the file content
+            # "r" = read mode (not write)
+            with open("commands.txt", "r", encoding="utf-8") as f:
+                content = f.read().strip()
             # .strip() removes leading/trailing whitespace/newlines
             # so "  open excel  \n" becomes "open excel"
 
-            # WHY THIS CHECK:
-            #   content must be non-empty AND different from last time.
-            #   This prevents re-running the same command twice.
-            if content and content != self.last_content:
-                self.last_content = content   # remember this command
-                self._last_trigger_ts = now
+            signature = (os.path.getmtime("commands.txt"), content)
+
+            # Process once per save. Allow same command text on later saves.
+            if content and signature != self.last_signature:
+                self.last_signature = signature
                 print(f"\n[WATCHER] New command detected: '{content}'")
                 self.callback(content)        # fire the agent!
 

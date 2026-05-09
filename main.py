@@ -1,27 +1,22 @@
+# main.py — Alternate entry point (polling-based, no watchdog)
+# Use this if watchdog causes issues. Normally run agent.py instead.
 import time
-from agent import process_command
+from agent import on_command
 
 COMMAND_FILE = "commands.txt"
-RESPONSE_FILE = "response.txt"
 
 last_command = ""
 
+print("[MAIN] Polling commands.txt every 2s. Edit and save to run a command.")
+
 while True:
-
-    with open(COMMAND_FILE, "r") as f:
-        command = f.read().strip()
-
-    if command != "" and command != last_command:
-
-        print("New command:", command)
-
-        result = process_command(command)
-
-        print("Result:", result)
-
-        with open(RESPONSE_FILE, "w") as f:
-            f.write(result)
-
-        last_command = command
-
+    try:
+        with open(COMMAND_FILE, "r") as f:
+            command = f.read().strip()
+        if command and command != last_command:
+            print(f"[MAIN] New command: {command}")
+            on_command(command)
+            last_command = command
+    except Exception as e:
+        print(f"[MAIN] Error: {e}")
     time.sleep(2)
