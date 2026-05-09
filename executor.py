@@ -58,7 +58,8 @@ def log_action(action_type: str, details: str, status: str = "INFO"):
     """Enhanced logging with timestamps and categories"""
     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     level = getattr(logging, status.upper(), logging.INFO)
-    msg = f"[{action_type}] {details}"
+    context_prefix = f"[cmd:{_active_command_id}] " if _active_command_id else ""
+    msg = f"[{action_type}] {context_prefix}{details}"
     logging.log(level, msg)
     print(f"[{timestamp}] {msg}")
 
@@ -125,6 +126,12 @@ def get_clipboard_text() -> str:
 
 _last_opened_app = None
 _last_opened_category = None
+_active_command_id = ""
+
+
+def set_log_context(command_id: str | None = None) -> None:
+    global _active_command_id
+    _active_command_id = str(command_id or "").strip()
 
 
 # ── TESSERACT PATH ────────────────────────────────────────────
@@ -263,6 +270,24 @@ WINDOW_TITLES = {
     "zoom":       "Zoom",
 }
 
+BROWSER_TITLE_HINTS = {
+    "chrome": ["chrome"],
+    "google": ["chrome"],
+    "edge": ["edge", "microsoft edge", "msedge"],
+    "msedge": ["edge", "microsoft edge", "msedge"],
+    "firefox": ["firefox"],
+    "brave": ["brave"],
+}
+
+BROWSER_FOREIGN_HINTS = {
+    "chrome": ["edge", "microsoft edge", "msedge", "firefox", "brave"],
+    "google": ["edge", "microsoft edge", "msedge", "firefox", "brave"],
+    "edge": ["chrome", "firefox", "brave"],
+    "msedge": ["chrome", "firefox", "brave"],
+    "firefox": ["chrome", "edge", "microsoft edge", "msedge", "brave"],
+    "brave": ["chrome", "edge", "microsoft edge", "msedge", "firefox"],
+}
+
 # Create screenshots folder
 os.makedirs("screenshots", exist_ok=True)
 
@@ -276,19 +301,27 @@ def focus_browser(app_name: str, settings: dict) -> bool:
     all_windows = gw.getAllWindows()
     matching = []
 
+    app_lower = app_name.lower()
+    include_hints = BROWSER_TITLE_HINTS.get(app_lower, [app_lower])
+    foreign_hints = BROWSER_FOREIGN_HINTS.get(app_lower, [])
+
     for win in all_windows:
         if not win.title:
             continue
         title_lower = win.title.lower()
-        # Browsers often have page title + browser name
-        for keyword in settings["window_keywords"]:
-            if keyword in title_lower:
-                matching.append(win)
-                break
+
+        # Lock browser focus to requested app (e.g. Chrome should not match Edge).
+        if any(h in title_lower for h in include_hints) and not any(h in title_lower for h in foreign_hints):
+            matching.append(win)
 
     if matching:
-        # For browsers, prefer windows with shorter titles (main window vs tabs)
-        matching.sort(key=lambda w: len(w.title) if w.title else 999)
+        # Prefer tabs with domain/app title over generic "New Tab".
+        matching.sort(
+            key=lambda w: (
+                1 if "new tab" in (w.title or "").lower() else 0,
+                len(w.title or "")
+            )
+        )
         return _activate_window(matching[0], settings)
 
     log_action("FOCUS", f"No browser window found for {app_name}", "WARNING")
@@ -376,6 +409,27 @@ def _activate_window(win, settings: dict) -> bool:
         return False
 
 
+def _get_active_window_title() -> str:
+    try:
+        active = gw.getActiveWindow()
+        if active and active.title:
+            return str(active.title)
+    except Exception as e:
+        log_action("FOCUS", f"Could not read active window title: {e}", "WARNING")
+    return ""
+
+
+def _active_window_matches_browser(app_name: str) -> bool:
+    app_lower = app_name.lower()
+    title = _get_active_window_title().lower()
+    if not title:
+        return False
+
+    include_hints = BROWSER_TITLE_HINTS.get(app_lower, [app_lower])
+    foreign_hints = BROWSER_FOREIGN_HINTS.get(app_lower, [])
+    return any(h in title for h in include_hints) and not any(h in title for h in foreign_hints)
+
+
 def focus_app_by_category(app_name: str) -> bool:
     """Main focus function - routes to category-specific handler"""
     global _last_opened_category
@@ -411,6 +465,41 @@ def focus_app_by_category(app_name: str) -> bool:
 def focus_app(app_name: str) -> bool:
     """Legacy focus function - now routes to category-based system"""
     return focus_app_by_category(app_name)
+
+
+def _focus_last_opened_app(action_label: str, strict: bool = False) -> tuple[bool, str]:
+    if not _last_opened_app:
+        return True, ""
+
+    _, settings = get_app_category(_last_opened_app)
+    focused = focus_app_by_category(_last_opened_app)
+    if not focused:
+        time.sleep(settings["focus_delay"])
+        focused = focus_app_by_category(_last_opened_app)
+
+    if focused:
+        if _last_opened_app and _last_opened_app.lower() in APP_CATEGORIES["browser"]["apps"]:
+            if not _active_window_matches_browser(_last_opened_app):
+                title = _get_active_window_title() or "<unknown>"
+                message = f"Active window mismatch for {_last_opened_app}: '{title}'"
+                if strict:
+                    log_action(action_label, message, "ERROR")
+                    return False, message
+                log_action(action_label, message, "WARNING")
+
+        time.sleep(settings["action_delay"])
+        return True, ""
+
+    if strict:
+        log_action(action_label, f"Could not focus {_last_opened_app}", "ERROR")
+        return False, f"Could not focus {_last_opened_app}"
+
+    log_action(
+        action_label,
+        f"Could not focus {_last_opened_app}; continuing with current foreground window",
+        "WARNING",
+    )
+    return True, ""
 
 
 # ── HELPER: Find Text on Screen Using OCR ────────────────────
@@ -609,10 +698,19 @@ def execute_action(action: dict) -> tuple[bool, str]:
             app_name = action.get("app", "").lower()
             exe = APP_MAP.get(app_name, app_name)
             category, settings = get_app_category(app_name)
+            target_url = str(action.get("url", "")).strip()
+
+            if target_url and not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", target_url):
+                target_url = f"https://{target_url}"
 
             log_action("OPEN_APP", f"Opening '{app_name}' (category: {category})")
 
-            subprocess.Popen(exe, shell=True)
+            launch_cmd = exe
+            if target_url and category == "browser":
+                launch_cmd = f'{exe} "{target_url}"'
+                log_action("OPEN_APP", f"Launching browser with URL: {target_url}")
+
+            subprocess.Popen(launch_cmd, shell=True)
 
             # Wait based on category
             log_action("OPEN_APP", f"Waiting {settings['load_time']}s for {category} app to load")
@@ -628,6 +726,8 @@ def execute_action(action: dict) -> tuple[bool, str]:
             if not focused:
                 log_action("OPEN_APP", f"App opened but window not focused", "WARNING")
 
+            if target_url and category == "browser":
+                return True, f"Opened {app_name} with URL: {target_url}"
             return True, f"Opened {exe}"
 
         # ── OPEN FILE ─────────────────────────────────────────
@@ -712,17 +812,9 @@ def execute_action(action: dict) -> tuple[bool, str]:
             text = action["text"]
             log_action("TYPE", f"Typing: '{text[:50]}...' (len={len(text)})")
 
-            # Focus the target app first
-            if _last_opened_app:
-                _, settings = get_app_category(_last_opened_app)
-                focused = focus_app_by_category(_last_opened_app)
-                if not focused:
-                    time.sleep(settings["focus_delay"])
-                    focused = focus_app_by_category(_last_opened_app)
-                    if not focused:
-                        log_action("TYPE", f"Could not focus {_last_opened_app}", "ERROR")
-                        return False, f"Could not focus {_last_opened_app}"
-                time.sleep(settings["action_delay"])
+            focused, note = _focus_last_opened_app("TYPE", strict=True)
+            if not focused:
+                return False, note
 
             pyautogui.write(text, interval=0.03)
             return True, f"Typed: '{text}'"
@@ -732,16 +824,9 @@ def execute_action(action: dict) -> tuple[bool, str]:
             text = action["text"]
             log_action("PASTE", f"Pasting: '{text[:50]}...' (len={len(text)})")
 
-            if _last_opened_app:
-                _, settings = get_app_category(_last_opened_app)
-                focused = focus_app_by_category(_last_opened_app)
-                if not focused:
-                    time.sleep(settings["focus_delay"])
-                    focused = focus_app_by_category(_last_opened_app)
-                    if not focused:
-                        log_action("PASTE", f"Could not focus {_last_opened_app}", "ERROR")
-                        return False, f"Could not focus {_last_opened_app}"
-                time.sleep(settings["action_delay"])
+            focused, note = _focus_last_opened_app("PASTE", strict=True)
+            if not focused:
+                return False, note
 
             _paste_text(text)
             return True, f"Pasted text len={len(text)}"
@@ -788,22 +873,25 @@ def execute_action(action: dict) -> tuple[bool, str]:
             keys = action.get("keys", [])
             log_action("KEY", f"Pressing: {keys}")
 
-            # Focus the target app first
-            if _last_opened_app:
-                _, settings = get_app_category(_last_opened_app)
-                focused = focus_app_by_category(_last_opened_app)
-                if not focused:
-                    time.sleep(settings["focus_delay"])
-                    focused = focus_app_by_category(_last_opened_app)
-                    if not focused:
-                        log_action("KEY", f"Could not focus {_last_opened_app}", "ERROR")
-                        return False, f"Could not focus {_last_opened_app}"
-                time.sleep(settings["action_delay"])
+            focused, note = _focus_last_opened_app("KEY", strict=True)
+            if not focused:
+                return False, note
 
-            if isinstance(keys, list) and len(keys) > 0:
-                pyautogui.hotkey(*keys)
+            if isinstance(keys, list):
+                normalized = [str(k).strip().lower() for k in keys if str(k).strip()]
+                if len(normalized) == 1:
+                    single = "enter" if normalized[0] == "return" else normalized[0]
+                    pyautogui.press(single)
+                elif len(normalized) > 1:
+                    pyautogui.hotkey(*normalized)
+                else:
+                    return False, "No key specified"
             else:
-                pyautogui.press(keys)
+                single = str(keys).strip().lower()
+                if not single:
+                    return False, "No key specified"
+                single = "enter" if single == "return" else single
+                pyautogui.press(single)
             return True, f"Pressed: {keys}"
 
         # ── SCROLL ────────────────────────────────────────────

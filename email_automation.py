@@ -13,6 +13,20 @@ EMAIL_COMMAND_HINTS = (
     "polish",
 )
 
+AUTO_DRAFT_HINTS = (
+    "by yourself",
+    "on your own",
+    "choose the subject",
+    "select the subject",
+    "decide the subject",
+    "select the body",
+    "main body by yourself",
+    "choose subject",
+    "choose body",
+    "make it interesting",
+    "mail should be interesting",
+)
+
 
 def is_email_command(command: str) -> bool:
     text = (command or "").lower()
@@ -44,11 +58,7 @@ def build_email_actions(details: dict[str, Any]) -> list[dict[str, Any]]:
     )
 
     actions: list[dict[str, Any]] = [
-        {"action": "open_app", "app": details.get("browser", "chrome")},
-        {"action": "wait", "seconds": 2},
-        {"action": "press_key", "keys": ["ctrl", "l"]},
-        {"action": "paste_text", "text": compose_url},
-        {"action": "press_key", "keys": ["enter"]},
+        {"action": "open_app", "app": details.get("browser", "chrome"), "url": compose_url},
         {"action": "wait", "seconds": 4},
         {"action": "screenshot", "label": "gmail_compose_ready"},
     ]
@@ -56,9 +66,10 @@ def build_email_actions(details: dict[str, Any]) -> list[dict[str, Any]]:
     if details.get("send") and to_list:
         actions.extend(
             [
+                # FIX: Use Ctrl+Enter keyboard shortcut to send — no OCR/Tesseract needed.
+                # Gmail compose accepts Ctrl+Enter as the Send shortcut in all browsers.
                 {"action": "press_key", "keys": ["ctrl", "enter"]},
-                {"action": "wait", "seconds": 1},
-                {"action": "press_key", "keys": ["enter"]},
+                {"action": "wait", "seconds": 2},
                 {"action": "screenshot", "label": "gmail_after_send"},
             ]
         )
@@ -69,7 +80,7 @@ def build_email_actions(details: dict[str, Any]) -> list[dict[str, Any]]:
 def validate_email_actions(actions: list[dict[str, Any]]) -> tuple[bool, str]:
     if not isinstance(actions, list) or not actions:
         return False, "No email actions were produced."
-    required = {"open_app", "wait", "press_key", "paste_text"}
+    required = {"open_app", "wait", "screenshot"}
     names = {item.get("action") for item in actions if isinstance(item, dict)}
     missing = sorted(required - names)
     if missing:
@@ -79,7 +90,9 @@ def validate_email_actions(actions: list[dict[str, Any]]) -> tuple[bool, str]:
 
 def wants_model_polish(command: str) -> bool:
     text = (command or "").lower()
-    return any(phrase in text for phrase in ("send to model", "polish", "professionalize", "professionalise"))
+    if any(phrase in text for phrase in ("send to model", "polish", "professionalize", "professionalise")):
+        return True
+    return any(phrase in text for phrase in AUTO_DRAFT_HINTS)
 
 
 def _extract_email_details(command: str) -> dict[str, Any]:
@@ -98,9 +111,16 @@ def _extract_email_details(command: str) -> dict[str, Any]:
     body = _extract_tagged_value(text, "body") or _extract_tagged_value(text, "message")
 
     if not subject:
-        about_match = re.search(r"\babout\s+(.+?)(?=\s+(?:with|saying|that|to|and\s+send|send\b)|$)", text, re.IGNORECASE)
+        about_match = re.search(
+            r"\babout\s+(.+?)(?=\s+\b(?:with|saying|that|to|and\s+send|send|select|choose|decide|subject|body|mail|email)\b|$)",
+            text,
+            re.IGNORECASE,
+        )
         if about_match:
             subject = about_match.group(1).strip(" .")
+
+    if _looks_like_subject_instruction(subject):
+        subject = ""
 
     if not body:
         saying_match = re.search(
@@ -117,12 +137,14 @@ def _extract_email_details(command: str) -> dict[str, Any]:
         body = clean_email_intent_text(text)
 
     browser = "chrome"
-    if "edge" in lower:
+    if "brave" in lower:
+        browser = "brave"
+    elif "edge" in lower:
         browser = "edge"
     elif "firefox" in lower:
         browser = "firefox"
 
-    send = _should_send(lower)
+    send = _should_send(lower, has_recipient=bool(to_list))
 
     return {
         "to": _dedupe(to_list),
@@ -141,8 +163,15 @@ def clean_email_intent_text(text: str) -> str:
     cleaned = text
     cleaned = re.sub(r"\b(?:send\s+to\s+model|polish|professionalize|professionalise)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(?:open\s+\w+\s+go\s+to\s+gmail\s+and\s+compose\s+(?:a\s+)?mail)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:select|choose|decide)\s+(?:the\s+)?(?:subject|body|main\s+body)\s+(?:by\s+yourself|on\s+your\s+own)?\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:mail\s+should\s+be\s+interesting|make\s+it\s+interesting)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\band\s+main\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "", cleaned)
+    cleaned = re.sub(r"\b(?:open|launch|start|go\s+to)\s+(?:gmail|mail|chrome|edge|brave|firefox)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:mail|email|gmail|compose)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(?:send|send\s+it|send\s+now|do\s+not\s+send|don't\s+send|dont\s+send)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(?:to|cc|bcc|subject|body|message)\b\s*[:=]?\s*[^\n]+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:something|anything)\s+about\b", "about", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
     return cleaned
 
@@ -166,18 +195,41 @@ def _extract_tagged_value(text: str, keyword: str) -> str:
     if quoted:
         return _strip_send_tail(quoted.group(1).strip())
 
-    unquoted = re.search(
-        rf"\b{keyword}\b\s*[:=]?\s*(.+?)(?=\s+\b{tail_stop}\b|$)",
+    explicit = re.search(
+        rf"\b{keyword}\b\s*[:=]\s*(.+?)(?=\s+\b{tail_stop}\b|$)",
         text,
         re.IGNORECASE,
     )
-    return _strip_send_tail(unquoted.group(1).strip()) if unquoted else ""
+    if explicit:
+        return _strip_send_tail(explicit.group(1).strip())
+
+    with_is = re.search(
+        rf"\b{keyword}\b\s+is\s+(.+?)(?=\s+\b{tail_stop}\b|$)",
+        text,
+        re.IGNORECASE,
+    )
+    return _strip_send_tail(with_is.group(1).strip()) if with_is else ""
 
 
-def _should_send(lower_text: str) -> bool:
+def _should_send(lower_text: str, has_recipient: bool = False) -> bool:
     if re.search(r"\b(do\s+not|don't|dont|without)\s+send\b", lower_text):
         return False
-    return bool(re.search(r"\b(send|send\s+it|send\s+now|send\s+email)\b", lower_text))
+    if re.search(r"\b(send|send\s+it|send\s+now|send\s+email)\b", lower_text):
+        return True
+    if not has_recipient:
+        return False
+    if re.search(r"\b(draft|as\s+draft|compose\s+draft)\b", lower_text):
+        return False
+    return bool(re.search(r"\b(mail|email|write\s+(an\s+)?email)\b", lower_text))
+
+
+def _looks_like_subject_instruction(subject: str) -> bool:
+    value = (subject or "").strip().lower()
+    if not value:
+        return False
+    if value in {"and", "main", "main body", "body", "subject"}:
+        return True
+    return bool(re.fullmatch(r"(?:and|the|main)\s+\w+", value))
 
 
 def _strip_send_tail(text: str) -> str:

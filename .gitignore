@@ -1,5 +1,10 @@
-.env
+.venv/
 __pycache__/
 *.pyc
+.env
+.vscode/
+screenshots/
+screen.png
+response.txt
+part_code_results.txt
 *.log
-node_modules/

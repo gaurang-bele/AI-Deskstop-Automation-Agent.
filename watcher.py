@@ -17,6 +17,7 @@
 # ── IMPORTS ──────────────────────────────────────────────────
 
 import time
+import os
 # time → we use time.sleep() to add small delays so the file
 # is fully written before we try to read it
 
@@ -44,10 +45,10 @@ class CommandWatcher(FileSystemEventHandler):
         #            when a new command is detected
         self.callback = callback
 
-        # last_content → we store the last command we processed.
+        # last_signature -> (file mtime, content) of last processed save.
         # WHY: watchdog can fire multiple times for one save.
-        # By comparing content, we only act when it ACTUALLY changed.
-        self.last_content = ""
+        # We want exactly one trigger per save, even if command text is unchanged.
+        self.last_signature = None
 
     def on_modified(self, event):
         # on_modified() is called by watchdog automatically
@@ -72,11 +73,11 @@ class CommandWatcher(FileSystemEventHandler):
             # .strip() removes leading/trailing whitespace/newlines
             # so "  open excel  \n" becomes "open excel"
 
-            # WHY THIS CHECK:
-            #   content must be non-empty AND different from last time.
-            #   This prevents re-running the same command twice.
-            if content and content != self.last_content:
-                self.last_content = content   # remember this command
+            signature = (os.path.getmtime("commands.txt"), content)
+
+            # Process once per save. Allow same command text on later saves.
+            if content and signature != self.last_signature:
+                self.last_signature = signature
                 print(f"\n[WATCHER] New command detected: '{content}'")
                 self.callback(content)        # fire the agent!
 

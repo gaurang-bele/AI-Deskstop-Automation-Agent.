@@ -70,6 +70,20 @@ class ExcelAutomationParserTests(unittest.TestCase):
         self.assertEqual(operations[2].params["operator"], "equals")
         self.assertEqual(operations[2].params["value"], "Approved")
 
+    def test_filter_starts_with_command_parses(self):
+        operations = self.parser.parse(
+            r"open C:\Users\DELL\Downloads\Orders_Table (2).csv and filter column transaction_id starts with 12"
+        )
+
+        self.assertEqual([operation.action for operation in operations], ["open_workbook", "filter_column"])
+        self.assertEqual(
+            operations[0].params["reference"],
+            r"C:\Users\DELL\Downloads\Orders_Table (2).csv",
+        )
+        self.assertEqual(operations[1].params["column"], "transaction_id")
+        self.assertEqual(operations[1].params["operator"], "starts with")
+        self.assertEqual(operations[1].params["value"], 12)
+
 
 class ExcelAutomationHelperTests(unittest.TestCase):
     def test_parser_outputs_valid_shared_actions(self):

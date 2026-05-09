@@ -1,0 +1,68 @@
+# Desktop AI Agent — Test Commands
+
+Try these commands one at a time. Save each in commands.txt and watch the agent work!
+
+## 1. SEARCH TASK (RECOMMENDED START)
+search 0603YG105ZAT2A part code get me full product details
+
+Expected: Browser opens → Google search → results extracted
+
+---
+
+## 2. EMAIL TASK
+mail gaurangbele178@gmail.com something interesting about artificial intelligence
+
+Expected: Browser opens → Gmail → compose email → send
+
+---
+
+## 3. CALCULATOR TASK
+open calculator and calculate 25 times 48
+
+Expected: Calculator opens → performs math → shows result
+
+---
+
+## 4. MULTI-STEP EMAIL
+email user@example.com with subject "Test" and message "Hello World"
+
+Expected: Similar to task 2 but with specific subject
+
+---
+
+## 5. WEB SEARCH
+search for latest AI models 2024 and give me the top results
+
+Expected: Browser opens → Google search → results extracted
+
+---
+
+## HOW TO TEST:
+1. Open commands.txt in editor
+2. Delete current command (if any)
+3. Paste ONE of the above commands
+4. Save the file
+5. Agent automatically runs (watch the terminal)
+6. Results appear in response.txt
+7. Check response.txt to see results
+
+---
+
+## EXPECTED BEHAVIOR:
+✅ Browser opens and is VISIBLE (not hidden)
+✅ Actions follow the workflow (no random clicks)
+✅ Keyboard shortcuts used instead of OCR/click_text
+✅ Completes in 5-15 steps
+✅ Results saved to response.txt
+
+---
+
+## IF SOMETHING FAILS:
+- Check the error message in terminal
+- Look for ❌ marks showing which step failed
+- Look at history to see what was attempted
+- Try a simpler command first (e.g., search instead of email)
+
+---
+
+Good luck! 🚀
